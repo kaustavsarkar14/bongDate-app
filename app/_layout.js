@@ -8,9 +8,11 @@ const MainLayout = () => {
   const router = useRouter();
 
   useEffect(() => {
+    console.log("VALUE OF ISAUTH", isAuthenticated +" "+ typeof isAuthenticated);
+
     if (typeof isAuthenticated == "undefined") return;
     else if (isAuthenticated) {
-      router.replace("Home");
+      router.replace("SwipePage");
     } else if (isAuthenticated == false) {
       router.replace("EnterPhoneNumber");
     }
