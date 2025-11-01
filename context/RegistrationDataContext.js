@@ -4,21 +4,21 @@ import { createContext, useContext, useState } from "react";
 export const RegistrationContext = createContext();
 
 // Define the initial empty state for the form
-const initialState = {
-  phoneNumber: "",
-  name: "",
-  birthdate: "",
-  gender: "",
-  oppositeGenderPreference: [],
-  intentions: [],
-  interests: [],
-  religion: "", 
-  politics: "",
-  faceVerified: false,
-  faceVerificationPhotoURL: "",
-  audioIntroUrl: "", 
-};
-
+// const initialState = {
+//   phoneNumber: "",
+//   name: "",
+//   birthdate: "",
+//   gender: "",
+//   oppositeGenderPreference: [],
+//   intentions: [],
+//   interests: [],
+//   religion: "",
+//   politics: "",
+//   faceVerified: false,
+//   faceVerificationPhotoURL: "",
+//   audioIntroUrl: "",
+// };
+const initialState = null;
 export const RegistrationContextProvider = ({ children }) => {
   const [formData, setFormData] = useState(initialState);
 

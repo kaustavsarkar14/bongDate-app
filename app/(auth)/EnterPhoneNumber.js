@@ -44,12 +44,10 @@ const EnterPhoneNumber = () => {
 
       if (querySnapshot.empty) {
         // 3. User does NOT exist
-        console.log("Phone number not registered. Navigating to signup...");
         // Navigate to the first registration page, passing the phone number
         router.push("RegistrationPage1");
       } else {
         // 4. User EXISTS
-        console.log("Phone number found. Navigating to OTP verification...");
         // Navigate to the OTP verification page, passing the phone number
         router.push("ValidateOTP");
       }

@@ -25,25 +25,25 @@ const ArrowIcon = () => (
 const RegistrationPage3 = () => {
   const { formData, updateFormData } = useRegistration();
   
-  // Preferences are stored as an array, e.g., ['Men', 'Women']
-  const [preferences, setPreferences] = useState(formData.preferences || []);
+  // oppositeGenderPreference are stored as an array, e.g., ['man', 'woman']
+  const [oppositeGenderPreference, setoppositeGenderPreference] = useState(formData.oppositeGenderPreference || []);
   
   // State for the "open to everyone" toggle
   const [openToEveryone, setOpenToEveryone] = useState(
-    preferences.length === 3 // Auto-check if all are selected
+    oppositeGenderPreference.length === 3 // Auto-check if all are selected
   );
   
   const router = useRouter();
-  const allOptions = ["Men", "Women", "Nonbinary"];
+  const allOptions = ["man", "woman", "nonbinary"];
 
   // Effect to manage the "open to everyone" toggle
   useEffect(() => {
     if (openToEveryone) {
-      setPreferences(allOptions);
+      setoppositeGenderPreference(allOptions);
     } else {
-      // If user toggles off, clear preferences unless they were already partial
-      if (preferences.length === allOptions.length) {
-        setPreferences([]);
+      // If user toggles off, clear oppositeGenderPreference unless they were already partial
+      if (oppositeGenderPreference.length === allOptions.length) {
+        setoppositeGenderPreference([]);
       }
     }
   }, [openToEveryone]);
@@ -52,32 +52,32 @@ const RegistrationPage3 = () => {
   const handleSelectPreference = (option) => {
     if (openToEveryone) return; // Do nothing if toggle is on
 
-    let newPreferences;
-    if (preferences.includes(option)) {
+    let newoppositeGenderPreference;
+    if (oppositeGenderPreference.includes(option)) {
       // De-select
-      newPreferences = preferences.filter((item) => item !== option);
+      newoppositeGenderPreference = oppositeGenderPreference.filter((item) => item !== option);
     } else {
       // Select
-      newPreferences = [...preferences, option];
+      newoppositeGenderPreference = [...oppositeGenderPreference, option];
     }
-    setPreferences(newPreferences);
+    setoppositeGenderPreference(newoppositeGenderPreference);
 
     // Check if all are selected, and update the "everyone" toggle
-    if (newPreferences.length === allOptions.length) {
+    if (newoppositeGenderPreference.length === allOptions.length) {
       setOpenToEveryone(true);
     }
   };
 
   const handleNext = () => {
-    if (preferences.length === 0) {
+    if (oppositeGenderPreference.length === 0) {
       Alert.alert("Please select an option", "Who would you like to meet?");
       return;
     }
 
-    // Save the preferences array to the central context
-    updateFormData({ preferences });
+    // Save the oppositeGenderPreference array to the central context
+    updateFormData({ oppositeGenderPreference });
 
-    console.log("Step 3 Data Updated:", { ...formData, preferences });
+    console.log("Step 3 Data Updated:", { ...formData, oppositeGenderPreference });
 
     // Navigate to the next step
     router.push("RegistrationPage4"); // You'll create this page next
@@ -141,21 +141,21 @@ const RegistrationPage3 = () => {
           {/* Preference Checkboxes */}
           <View style={styles.checkboxGroup}>
             <Checkbox
-              label="Men"
-              selected={preferences.includes("Men")}
-              onSelect={() => handleSelectPreference("Men")}
+              label="man"
+              selected={oppositeGenderPreference.includes("man")}
+              onSelect={() => handleSelectPreference("man")}
               disabled={openToEveryone}
             />
             <Checkbox
-              label="Women"
-              selected={preferences.includes("Women")}
-              onSelect={() => handleSelectPreference("Women")}
+              label="woman"
+              selected={oppositeGenderPreference.includes("woman")}
+              onSelect={() => handleSelectPreference("woman")}
               disabled={openToEveryone}
             />
             <Checkbox
-              label="Nonbinary people"
-              selected={preferences.includes("Nonbinary")}
-              onSelect={() => handleSelectPreference("Nonbinary")}
+              label="nonbinary people"
+              selected={oppositeGenderPreference.includes("nonbinary")}
+              onSelect={() => handleSelectPreference("nonbinary")}
               disabled={openToEveryone}
             />
           </View>

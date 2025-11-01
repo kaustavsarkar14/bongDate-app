@@ -85,19 +85,19 @@ const RegistrationPage2 = () => {
 
           <View style={styles.radioGroup}>
             <RadioButton
-              label="Woman"
-              selected={gender === "Woman"}
-              onSelect={() => setGender("Woman")}
+              label="woman"
+              selected={gender === "woman"}
+              onSelect={() => setGender("woman")}
             />
             <RadioButton
-              label="Man"
-              selected={gender === "Man"}
-              onSelect={() => setGender("Man")}
+              label="man"
+              selected={gender === "man"}
+              onSelect={() => setGender("man")}
             />
             <RadioButton
-              label="Nonbinary"
-              selected={gender === "Nonbinary"}
-              onSelect={() => setGender("Nonbinary")}
+              label="nonbinary"
+              selected={gender === "nonbinary"}
+              onSelect={() => setGender("nonbinary")}
             />
           </View>
         </ScrollView>

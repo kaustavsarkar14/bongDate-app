@@ -5,20 +5,22 @@ import {
   signInWithPhoneNumber,
   signOut,
 } from "firebase/auth";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, use, useContext, useEffect, useState } from "react";
 import { auth, db } from "../firebase.config";
-import { doc, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, setDoc } from "firebase/firestore";
+import { useRouter } from "expo-router";
 
 export const AuthContext = createContext();
 
 export const AuthContextProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(undefined);
-
+  const router = useRouter();
   useEffect(() => {
-    setIsAuthenticated(false)
+    setIsAuthenticated(false);
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) {
+        console.log("user", user);
         setUser(user);
         setIsAuthenticated(true);
       } else {
@@ -68,31 +70,53 @@ export const AuthContextProvider = ({ children }) => {
       throw error;
     }
   };
-  const signup = async (email, password) => {
+  const signUp = async ({ formData, uid }) => {
+    console.log("THEERE IS THE UID", uid);
     try {
-      const response = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-
-      await setDoc(doc(db, "users", response.user.uid), {
-        username: "test username",
-        email: email,
-        userId: response.user.uid,
+      const response = await setDoc(doc(db, "users", uid), {
+        ...formData,
+       uid,
       });
-
-      return response.user;
+      setUser({ ...formData, uid });
     } catch (error) {
       console.log("Error signing up:", error);
       alert("Signup Error", error.message);
       throw error;
     }
   };
+  const getUser = async (uid) => {
+    try {
+      const docRef = doc(db, "users", uid);
+      const docSnap = await getDoc(docRef);
 
+      // 3. FIX: Check if the document actually exists.
+      // getDoc() does NOT throw an error if the doc is not found.
+      if (docSnap.exists()) {
+        return docSnap.data(); // Return the user's data
+      } else {
+        // Handle the case where the user's profile doesn't exist
+        console.log("No user document found for uid:", uid);
+        return null; // Return null (safer than undefined)
+      }
+    } catch (error) {
+      // This will catch permissions errors or network issues
+      console.log("Error getting user:", error);
+      alert("Get User Error", error.message);
+      throw error;
+    }
+  };
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, login, logout, signup, OTPLogin }}
+      value={{
+        user,
+        setUser,
+        isAuthenticated,
+        login,
+        logout,
+        signUp,
+        OTPLogin,
+        getUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

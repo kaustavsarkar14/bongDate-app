@@ -22,7 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const OTP_LENGTH = 6;
 
 export default function ValidateOTP() {
-  const { OTPLogin } = useAuth();
+  const { OTPLogin, signUp, setUser, getUser } = useAuth();
   const { formData } = useRegistration(); // Get data from our registration form
   const router = useRouter();
 
@@ -62,6 +62,7 @@ export default function ValidateOTP() {
         );
         otpInputRef.current?.focus(); // Focus the input
       } catch (err) {
+        router.replace("Error");
         console.error(err);
         setError("Failed to send OTP. Please try again.");
       } finally {
@@ -90,12 +91,29 @@ export default function ValidateOTP() {
     setError(null);
 
     try {
-      await confirmation.confirm(code);
+      const result = await confirmation.confirm(code);
+      console.log("this is result of confim");
+      console.log(result.uid);
+      setUser(result.user);
       Alert.alert("Success!", "Your phone number has been verified.");
-      // The onAuthStateChanged in your AuthContext will
-      // also detect this and set isAuthenticated = true.
 
-      console.log(formData);
+      // IF IT IS A SIGNUP
+
+      if (formData.name) {
+        try {
+          await signUp({ formData, uid: result.user.uid });
+          alert("Signup Success", "Your account has been created.");
+        } catch (error) {
+          router.replace("Error");
+        }
+      }
+      // IF IT IS A LOGIN
+      else {
+        const loggedInUser = await getUser(result.user.uid);
+        console.log("THIS IS LOGGED IN USER FROM DB")
+        console.log(loggedInUser)
+        setUser(loggedInUser);
+      }
     } catch (err) {
       console.error(err);
       setError("Invalid OTP. Please try again.");

@@ -38,11 +38,12 @@ const UploadIDCard = () => {
     // For now, we'll just navigate.
     // updateFormData({ idCardUrl: "some-url" }); // Example
     router.push("/(auth)/RegistrationPage10"); // Next: Record Audio
+    console.log(formData);
   };
 
   const handleSkip = () => {
     updateFormData({ idCardUrl: "" }); // Save as empty
-    router.push("/(auth)/RegistrationPage10"); // Next: Record Audio
+    router.push("ValidateOTP"); // Next: Record Audio
   };
 
   return (

@@ -6,7 +6,6 @@ import { useEffect } from "react";
 const MainLayout = () => {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
-  console.log(isAuthenticated);
 
   useEffect(() => {
     if (typeof isAuthenticated == "undefined") return;
