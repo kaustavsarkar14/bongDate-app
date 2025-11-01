@@ -2,6 +2,7 @@ import { Stack, useRouter } from "expo-router";
 
 import { AuthContextProvider, useAuth } from "../context/AuthContext";
 import { useEffect } from "react";
+import Toast from "react-native-toast-message";
 
 const MainLayout = () => {
   const { isAuthenticated } = useAuth();
@@ -25,6 +26,7 @@ export default function RootLayout() {
   return (
     <AuthContextProvider>
       <MainLayout />
+      <Toast/>
     </AuthContextProvider>
   );
 }

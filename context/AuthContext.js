@@ -9,6 +9,7 @@ import { createContext, use, useContext, useEffect, useState } from "react";
 import { auth, db } from "../firebase.config";
 import { addDoc, collection, doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "expo-router";
+import Toast from "react-native-toast-message";
 
 export const AuthContext = createContext();
 
@@ -17,10 +18,11 @@ export const AuthContextProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(undefined);
   const router = useRouter();
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        console.log("user", user);
-        setUser(user);
+        const response = await getUser(user.uid);
+        setUser(response);
+
         setIsAuthenticated(true);
       } else {
         setUser(null);
@@ -60,12 +62,17 @@ export const AuthContextProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Use Firebase to sign out
       await signOut(auth);
-      // onAuthStateChanged will handle setting the user state to null
+      Toast.show({
+        type: "success",
+        text1: "You have been logged out.",
+      });
     } catch (error) {
       console.log("Error logging out:", error);
-      alert("Logout Error", error.message);
+      Toast.show({
+        type: "error",
+        text1: "Logout Error",
+      });
       throw error;
     }
   };
@@ -74,7 +81,7 @@ export const AuthContextProvider = ({ children }) => {
     try {
       const response = await setDoc(doc(db, "users", uid), {
         ...formData,
-       uid,
+        uid,
       });
       setUser({ ...formData, uid });
     } catch (error) {

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Alert,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +17,7 @@ import { app } from "../../firebase.config"; // Make sure this path is correct
 import { useAuth } from "../../context/AuthContext";
 import { useRegistration } from "../../context/RegistrationDataContext";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
 
 const OTP_LENGTH = 6;
 
@@ -39,7 +39,11 @@ export default function ValidateOTP() {
     const sendOtp = async () => {
       // Ensure phone number and verifier are ready
       if (!formData.phoneNumber || !recaptchaVerifier.current) {
-        Alert.alert("Error", "Could not get phone number. Please go back.");
+        Toast.show({
+          type: "error",
+          text1: "Error",
+          text2: "Could not get phone number. Please go back."
+        })
         setIsLoading(false);
         return router.replace("EnterPhoneNumber");
       }
@@ -56,10 +60,11 @@ export default function ValidateOTP() {
         // After the user solves it, the promise resolves.
 
         setConfirmation(confirmationResult);
-        Alert.alert(
-          "OTP Sent",
-          `A code has been sent to ${formData.phoneNumber}`
-        );
+        Toast.show({
+          type: "success",
+          text1: "OTP Sent",
+          text2: `A code has been sent to ${formData.phoneNumber}`
+        })
         otpInputRef.current?.focus(); // Focus the input
       } catch (err) {
         router.replace("Error");
@@ -95,14 +100,21 @@ export default function ValidateOTP() {
       console.log("this is result of confim");
       console.log(result.uid);
       setUser(result.user);
-      Alert.alert("Success!", "Your phone number has been verified.");
+      Toast.show({
+        type: "success",
+        text1: "OTP Verified",
+      })
 
       // IF IT IS A SIGNUP
 
       if (formData.name) {
         try {
           await signUp({ formData, uid: result.user.uid });
-          alert("Signup Success", "Your account has been created.");
+          Toast.show({
+            type: "success",
+            text1: "Signup Success",
+            text2: "Your account has been created."
+          })
         } catch (error) {
           router.replace("Error");
         }

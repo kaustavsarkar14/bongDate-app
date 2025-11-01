@@ -1,11 +1,19 @@
-import { StyleSheet, Text, View, Platform } from "react-native";
+import { StyleSheet, Text, View, Platform, TouchableOpacity } from "react-native";
 import React from "react";
 // react-native-safe-area-context is better for headers as it gives more control
 import { SafeAreaView } from "react-native-safe-area-context";
 // Import icons (included with Expo)
 import { Ionicons } from "@expo/vector-icons"; // Removed MaterialCommunityIcons
+import Toast from "react-native-toast-message";
 
 const HomeHeader = () => {
+  const handleNotificationPress = () => {
+    Toast.show({
+      type: 'success', // Can be 'success', 'error', 'info'
+      text1: 'Notification Clicked',
+      text2: 'Your changes have been updated successfully.'
+    });
+  }
   return (
     // Use edges to only apply padding to the top (inside the safe area)
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -14,9 +22,9 @@ const HomeHeader = () => {
         <Text style={styles.title}>BongDate</Text>
 
         {/* Right Side: Icon */}
-        <View style={styles.iconsContainer}>
+        <TouchableOpacity style={styles.iconsContainer} onPress={handleNotificationPress}>
           <Ionicons name="notifications-outline" size={26} color="white" />
-        </View>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

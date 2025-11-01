@@ -4,7 +4,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView, // 1. Import
   ScrollView, // 2. Import
@@ -16,6 +15,7 @@ import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../firebase.config";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRegistration } from "../../context/RegistrationDataContext";
+import Toast from "react-native-toast-message";
 
 const EnterPhoneNumber = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -25,10 +25,11 @@ const EnterPhoneNumber = () => {
   const handleNext = async () => {
     // Basic validation
     if (phoneNumber.trim().length < 10) {
-      Alert.alert(
-        "Invalid Phone Number",
-        "Please enter a valid phone number with your country code."
-      );
+      Toast.show({
+        type: "error",
+        text1: "Invalid Phone Number",
+        text2: "Please enter a valid phone number with your country code."
+      })
       return;
     }
 
@@ -53,7 +54,11 @@ const EnterPhoneNumber = () => {
       }
     } catch (error) {
       console.error("Error checking phone number: ", error);
-      Alert.alert("Error", "Could not verify phone number. Please try again.");
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Could not verify phone number. Please try again."
+      })
     } finally {
       setIsLoading(false);
     }
