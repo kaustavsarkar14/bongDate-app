@@ -30,90 +30,7 @@ import { useLocalSearchParams } from "expo-router";
 const ChatWindow = () => {
   const otherUserId = useLocalSearchParams().uid;
   const { user } = useAuth();
-  const [messages, setMessages] = useState([
-    { id: 1, text: "Hey there!", sender: "other" },
-    { id: 2, text: "Hi! How are you?", sender: "me" },
-    { id: 3, text: "I'm good, just got back from work.", sender: "other" },
-    { id: 4, text: "Nice! How was your day?", sender: "me" },
-    { id: 5, text: "Pretty hectic but productive. Yours?", sender: "other" },
-    { id: 6, text: "Same here. Wrapped up a few pending tasks.", sender: "me" },
-    {
-      id: 7,
-      text: "That's good to hear. Any plans for tonight?",
-      sender: "other",
-    },
-    { id: 8, text: "Maybe just watch a movie and relax.", sender: "me" },
-    { id: 9, text: "Sounds like a plan! Any movie in mind?", sender: "other" },
-    { id: 10, text: "Thinking of rewatching Inception 😅", sender: "me" },
-    { id: 11, text: "Haha, classic choice. Never gets old!", sender: "other" },
-    {
-      id: 12,
-      text: "Exactly! I always notice something new each time.",
-      sender: "me",
-    },
-    {
-      id: 13,
-      text: "True that. Nolan really knows how to twist your brain 😂",
-      sender: "other",
-    },
-    {
-      id: 14,
-      text: "Haha totally agree! Anyway, how’s your weekend looking?",
-      sender: "me",
-    },
-    {
-      id: 15,
-      text: "Pretty chill, might go hiking if the weather’s good.",
-      sender: "other",
-    },
-    { id: 16, text: "That sounds fun! Send me pics if you go!", sender: "me" },
-    { id: 17, text: "For sure! You should join next time.", sender: "other" },
-    {
-      id: 18,
-      text: "I’d love to! Haven’t been hiking in months.",
-      sender: "me",
-    },
-    {
-      id: 19,
-      text: "Then it’s settled. Next weekend, you’re coming 😄",
-      sender: "other",
-    },
-    { id: 20, text: "Deal! Hope I can keep up though 😂", sender: "me" },
-    { id: 21, text: "Haha, don’t worry. It’s an easy trail.", sender: "other" },
-    { id: 22, text: "Good, because my cardio is tragic 😅", sender: "me" },
-    { id: 23, text: "Haha same here, we’ll suffer together!", sender: "other" },
-    {
-      id: 24,
-      text: "At least we’ll get some good views out of it.",
-      sender: "me",
-    },
-    {
-      id: 25,
-      text: "Absolutely! And maybe some coffee afterward?",
-      sender: "other",
-    },
-    {
-      id: 26,
-      text: "Yes, coffee is mandatory after any physical activity ☕",
-      sender: "me",
-    },
-    {
-      id: 27,
-      text: "Agreed! You’re speaking my language now 😂",
-      sender: "other",
-    },
-    {
-      id: 28,
-      text: "Haha always! Can’t survive without caffeine.",
-      sender: "me",
-    },
-    {
-      id: 29,
-      text: "Same! Alright, I’ll text you the details later.",
-      sender: "other",
-    },
-    { id: 30, text: "Cool, looking forward to it!", sender: "me" },
-  ]);
+  const [messages, setMessages] = useState([]);
 
   const [inputText, setInputText] = useState("");
   const scrollViewRef = useRef();
@@ -180,7 +97,7 @@ const ChatWindow = () => {
           scrollViewRef.current?.scrollToEnd({ animated: true })
         }
       >
-        {messages.map((msg) => (
+        {messages.length > 0 && messages.map((msg) => (
           <View
             key={msg.uid}
             style={[
