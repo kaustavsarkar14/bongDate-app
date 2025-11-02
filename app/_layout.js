@@ -14,6 +14,7 @@ const MainLayout = () => {
     if (typeof isAuthenticated == "undefined") return;
     else if (isAuthenticated) {
       router.replace("SwipePage");
+      // router.replace("ChatWindow");
     } else if (isAuthenticated == false) {
       router.replace("EnterPhoneNumber");
     }
