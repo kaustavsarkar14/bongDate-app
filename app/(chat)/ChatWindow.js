@@ -22,33 +22,43 @@ import {
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
   setDoc,
 } from "firebase/firestore";
 import { db } from "../../firebase.config";
 import { useLocalSearchParams } from "expo-router";
 
 const ChatWindow = () => {
-  const otherUserId = useLocalSearchParams().uid;
-  const { user } = useAuth();
+  const { otherUserId } = useLocalSearchParams();
+  const [otherUsername, setOtherUsername] = useState("Loading...");
+  const { user, getUser } = useAuth();
   const [messages, setMessages] = useState([]);
 
   const [inputText, setInputText] = useState("");
   const scrollViewRef = useRef();
 
+  const setUserDetails= async()=> {
+    const otherUserData = await getUser(otherUserId);
+    setOtherUsername(otherUserData.name)
+  }
   useEffect(() => {
     const docRef = doc(
       db,
       "chats",
       getChatIdFromUserIds(user.uid, otherUserId)
-      // "rgYIZvaACROB9WlcwbnryyXsQ0i2uTMFzDqj3GXuZWXpj8kc8DSoNG93"
     );
 
     const messageRef = collection(docRef, "messages");
     const q = query(messageRef, orderBy("timestamp", "asc"));
     const unsub = onSnapshot(q, (snapshot) => {
-      let allMessages = snapshot.docs.map((doc) => doc.data());
+      let allMessages = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
       setMessages(allMessages);
     });
+
+    setUserDetails()
     return unsub;
   }, []);
 
@@ -61,15 +71,27 @@ const ChatWindow = () => {
         db,
         "chats",
         getChatIdFromUserIds(user.uid, otherUserId)
-        // "rgYIZvaACROB9WlcwbnryyXsQ0i2uTMFzDqj3GXuZWXpj8kc8DSoNG93"
       );
 
       const messageRef = collection(docRef, "messages");
       const newDoc = await addDoc(messageRef, {
         userId: user.uid,
         message: inputText,
-        timestamp: Date.now(),
+        timestamp: serverTimestamp(),
       });
+
+    
+     await setDoc(
+      docRef,
+      {
+        lastMessage: {
+          text: inputText,
+          senderId: user.uid,
+          timestamp: serverTimestamp(),
+        },
+      },
+      { merge: true } // ensures we only update the field, not overwrite the whole document
+    );
     } catch (error) {
       console.log(error);
       Toast.show({
@@ -78,7 +100,6 @@ const ChatWindow = () => {
       });
     }
   };
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -86,7 +107,7 @@ const ChatWindow = () => {
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 80}
     >
       {/* Header */}
-      <ChatWindowHeader />
+      <ChatWindowHeader otherUsername={otherUsername} />
 
       {/* Messages */}
       <ScrollView
@@ -97,17 +118,20 @@ const ChatWindow = () => {
           scrollViewRef.current?.scrollToEnd({ animated: true })
         }
       >
-        {messages.length > 0 && messages.map((msg) => (
-          <View
-            key={msg.uid}
-            style={[
-              styles.messageBubble,
-              msg.userId === user.uid ? styles.myMessage : styles.otherMessage,
-            ]}
-          >
-            <Text style={styles.messageText}>{msg.message}</Text>
-          </View>
-        ))}
+        {messages.length > 0 &&
+          messages.map((msg) => (
+            <View
+              key={msg.id}
+              style={[
+                styles.messageBubble,
+                msg.userId === user.uid
+                  ? styles.myMessage
+                  : styles.otherMessage,
+              ]}
+            >
+              <Text style={styles.messageText}>{msg.message}</Text>
+            </View>
+          ))}
       </ScrollView>
 
       {/* Input Section */}

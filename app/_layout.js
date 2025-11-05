@@ -11,8 +11,7 @@ const MainLayout = () => {
   useEffect(() => {
     if (typeof isAuthenticated == "undefined") return;
     else if (isAuthenticated) {
-      router.replace("SwipePage");
-      // router.replace("ChatWindow");
+      router.replace("/ChatPage");
     } else if (isAuthenticated == false) {
       router.replace("EnterPhoneNumber");
     }

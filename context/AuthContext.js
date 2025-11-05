@@ -77,7 +77,6 @@ export const AuthContextProvider = ({ children }) => {
     }
   };
   const signUp = async ({ formData, uid }) => {
-    console.log("THEERE IS THE UID", uid);
     try {
       const response = await setDoc(doc(db, "users", uid), {
         ...formData,
@@ -91,6 +90,7 @@ export const AuthContextProvider = ({ children }) => {
     }
   };
   const getUser = async (uid) => {
+
     try {
       const docRef = doc(db, "users", uid);
       const docSnap = await getDoc(docRef);

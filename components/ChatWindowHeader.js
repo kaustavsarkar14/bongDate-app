@@ -3,10 +3,12 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router"; // Import 
 import { ArrowLeft } from "lucide-react-native";
 
 // This logic should be inside your _layout.js file's Stack
-const ChatWindowHeader = () => {
+const ChatWindowHeader = ({ otherUsername }) => {
   const params = useLocalSearchParams();
   const router = useRouter();
   // This function handles navigation to the profile
+
+  console.log("header", otherUsername);
   const handleProfilePress = () => {
     // Assuming you have the user's ID in params
     if (params.userId) {
@@ -15,7 +17,7 @@ const ChatWindowHeader = () => {
       console.log("Cannot navigate: No user ID provided in params");
     }
   };
-
+  console.log("chatheafer", otherUsername);
   return (
     <Stack.Screen
       options={{
@@ -49,7 +51,7 @@ const ChatWindowHeader = () => {
                 style={styles.profileImage}
               />
               <Text style={styles.name} numberOfLines={1}>
-                {params?.name || "John Doe"}
+                {otherUsername}
               </Text>
             </TouchableOpacity>
           </View>
