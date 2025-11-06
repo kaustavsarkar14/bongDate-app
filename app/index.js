@@ -10,7 +10,7 @@ export default function StartUpPage() {
       }}
     >
       <Text className="text-red-500">
-        Edit app/index.tsx to edit this screen.
+        Welcome to BongDate 🎉 
       </Text>
       <ActivityIndicator size="large" color="#0000ff" />
     </View>

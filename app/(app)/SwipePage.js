@@ -9,43 +9,56 @@ import {
   where,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Swiper from "react-native-deck-swiper";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase.config";
 import Toast from "react-native-toast-message";
 import { getChatIdFromUserIds } from "../../utilities/functions";
 import SwipeCard from "../../components/SwipeCard";
-import { useAudioPlayer } from "expo-audio";
+import {
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  useAudioSampleListener,
+} from "expo-audio";
+import SwipeCardDetail from "../../components/SwipeCardDetail";
 
 const SwipePage = () => {
   const [users, setUsers] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
   const { user } = useAuth();
 
-  const [audioSource, setAudioSource] = useState(
-    users?.[0]?.audioUrls?.[0] ?? null
-  );
+  const [audioSource, setAudioSource] = useState(null);
 
   const player = useAudioPlayer(audioSource);
+  const status = useAudioPlayerStatus(player);
 
+  const handleAudioChange = (cardIndex) => {
+    if (cardIndex == users.length - 1) {
+      return;
+    }
+    if (!users[cardIndex]) return;
+    setAudioSource(
+      users[cardIndex + 1].audioUrls?.[Math.floor(Math.random() * 3)]
+    );
+  };
   const handleSwipeLeft = (cardIndex) => {
     if (!users[cardIndex]) return;
+    handleAudioChange(cardIndex);
 
     const swipedUser = users[cardIndex];
     setDoc(doc(db, "users", user.uid, "passes", swipedUser.id), swipedUser);
   };
 
   const handleSwipeRight = async (cardIndex) => {
-    if (!users[cardIndex]) return;
-    setAudioSource(users[cardIndex + 1].audioUrls?.[0]);
+    handleAudioChange(cardIndex);
     // const swipedUser = users[cardIndex];
     // setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
-
     // const checkIfOtherUserSwiped = await getDoc(
     //   doc(db, "users", swipedUser.uid, "likes", user.uid)
     // );
-
     // if (checkIfOtherUserSwiped.exists()) {
     //   // create a chat
     //   Toast.show({
@@ -67,7 +80,9 @@ const SwipePage = () => {
     //   });
     // }
   };
-
+  const handleSwipeTop = async (cardIndex) => {
+    console.log(cardIndex);
+  };
   useEffect(() => {
     let unsub;
 
@@ -105,7 +120,6 @@ const SwipePage = () => {
           const filteredUsers = allUsers.filter(
             (u) => !excludedIds.includes(u.uid) && u.uid !== user.uid
           );
-
           setUsers(filteredUsers);
         });
       } catch (error) {
@@ -128,16 +142,28 @@ const SwipePage = () => {
   }, []);
 
   const replayAudio = () => {
+    if (!player || !status.isLoaded) return; // check player exists and is loaded
     player.seekTo(0);
     player.play();
   };
+
   useEffect(() => {
-    console.log(audioSource);
+    console.log("audioSource" + audioSource);
     if (audioSource) {
       player.play();
     }
     return () => {};
   }, [audioSource]);
+
+  useEffect(() => {
+    if (users?.length > 0) {
+      const firstAudio =
+        users[0].audioUrls[
+          Math.floor(Math.random() * users[0].audioUrls.length)
+        ];
+      setAudioSource(firstAudio);
+    }
+  }, [users]);
 
   return (
     <View style={styles.container}>
@@ -145,21 +171,46 @@ const SwipePage = () => {
         <Text>No more profiles</Text>
       ) : (
         <Swiper
+          key={`${users?.length}-${status.playing}`}
+          keyExtractor={(card) => card.uid}
           cards={users}
           backgroundColor={"transparent"}
           verticalSwipe={false}
+          disableBottomSwipe={true}
           onSwipedAll={() => {
             setUsers(null);
           }}
           renderCard={(card) => {
-            return <SwipeCard user={card} replayAudio={replayAudio} />;
+            return (
+              <SwipeCard
+                user={card}
+                replayAudio={replayAudio}
+                player={player}
+                status={status}
+                key={card.uid}
+              />
+            );
           }}
           onSwipedLeft={(cardIndex) => handleSwipeLeft(cardIndex)}
           onSwipedRight={(cardIndex) => handleSwipeRight(cardIndex)}
+          onSwipedTop={(cardIndex) => handleSwipeTop(cardIndex)}
+          // onSwiped={handleSwipe}
           cardIndex={0}
           stackSize={10}
         ></Swiper>
       )}
+      <TouchableOpacity
+        onPress={() => {
+          setShowProfileModal(true);
+        }}
+      >
+        <Text>Open Modal</Text>
+      </TouchableOpacity>
+
+      <SwipeCardDetail
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </View>
   );
 };

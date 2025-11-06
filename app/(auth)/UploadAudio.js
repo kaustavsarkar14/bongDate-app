@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Animated,
 } from "react-native";
 import {
   useAudioRecorder,
@@ -13,26 +14,25 @@ import {
   RecordingPresets,
   setAudioModeAsync,
 } from "expo-audio";
-import { useAudioPlayer } from "expo-audio";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { uploadAudioToFirebase } from "../../utilities/firebaseFunctions";
 import { useRegistration } from "../../context/RegistrationDataContext";
 import { useRouter } from "expo-router";
+import { Mic, Play, RotateCcw, ArrowRight } from "lucide-react-native";
 
 const questions = [
-  "Describe yourself in short",
-  "Describe yourself as a partner",
-  "What is your partner preference?",
+  "Describe yourself in short ✍🏻",
+  "Describe yourself as a partner 👫",
+  "What is your partner preference? 👀",
 ];
 
 const MAX_RECORDING_DURATION = 60 * 1000; // 60 seconds
 
 const UploadAudio = () => {
-    const route = useRouter();
+  const router = useRouter();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [audioUris, setAudioUris] = useState(
-    Array(questions.length).fill(null)
-  );
+  const [audioUris, setAudioUris] = useState(Array(questions.length).fill(null));
   const [isUploading, setIsUploading] = useState(false);
   const { formData, updateFormData } = useRegistration();
 
@@ -41,8 +41,12 @@ const UploadAudio = () => {
 
   const [audioSource, setAudioSource] = useState(null);
   const player = useAudioPlayer(audioSource);
+  const playerStatus = useAudioPlayerStatus(player);
 
-  // Setup audio mode once
+  // Animated pulse value + ref for the loop animation
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef(null);
+
   React.useEffect(() => {
     setAudioModeAsync({
       allowsRecording: true,
@@ -50,10 +54,56 @@ const UploadAudio = () => {
     });
   }, []);
 
+  // Pulse animation control (store loop so we can stop it)
+  const startPulse = () => {
+    // if already running, don't start another loop
+    if (pulseLoopRef.current) return;
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.3,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    pulseLoopRef.current = loop;
+    loop.start();
+  };
+
+  const stopPulse = () => {
+    if (pulseLoopRef.current) {
+      try {
+        pulseLoopRef.current.stop();
+      } catch (e) {
+        // ignore
+      }
+      pulseLoopRef.current = null;
+    }
+    // reset value
+    pulseAnim.stopAnimation(() => {
+      pulseAnim.setValue(1);
+    });
+  };
+
   const startRecording = async () => {
     try {
+      // prevent starting recording while playing
+      if (playerStatus?.isPlaying) {
+        Alert.alert("Wait", "Stop playback before recording.");
+        return;
+      }
+
       await recorder.prepareToRecordAsync();
       recorder.record();
+      startPulse();
 
       // auto-stop after 60s
       setTimeout(() => {
@@ -68,12 +118,12 @@ const UploadAudio = () => {
   const stopRecording = async () => {
     try {
       await recorder.stop();
-      const uri = recorder.uri;
+      stopPulse();
 
+      const uri = recorder.uri;
       const updatedUris = [...audioUris];
       updatedUris[currentQuestionIndex] = uri;
       setAudioUris(updatedUris);
-
       setAudioSource(uri);
     } catch (err) {
       console.error(err);
@@ -82,47 +132,73 @@ const UploadAudio = () => {
   };
 
   const playAudio = async (uri) => {
-    if (!uri) return;
-    player.seekTo(0);
-    player.play();
+    if (!uri || recorderState.isRecording) return;
+    // set source explicitly in case it wasn't set
+    setAudioSource(uri);
+
+    // start animation & play
+    startPulse();
+    try {
+      // seek and play defensively
+      if (player?.seekTo) player.seekTo(0);
+      if (player?.play) await player.play();
+    } catch (err) {
+      console.error("Playback error:", err);
+      stopPulse();
+    }
+  };
+
+  // Stop pulse when playback ends
+  React.useEffect(() => {
+    // playerStatus.isPlaying can be true/false/undefined
+    if (playerStatus?.isPlaying === false) {
+      stopPulse();
+    }
+
+    // if playback started, ensure pulse is running
+    if (playerStatus?.isPlaying === true) {
+      startPulse();
+    }
+  }, [playerStatus]);
+
+  const reRecord = () => {
+    const updatedUris = [...audioUris];
+    updatedUris[currentQuestionIndex] = null;
+    setAudioUris(updatedUris);
+    setAudioSource(null);
+    // ensure animation stopped
+    stopPulse();
   };
 
   const handleNext = async () => {
     const currentUri = audioUris[currentQuestionIndex];
-
     if (!currentUri) {
-      Alert.alert(
-        "Record your answer",
-        "Please record audio before proceeding."
-      );
+      Alert.alert("Record your answer", "Please record audio before proceeding.");
       return;
     }
+
+    // stop any pulse and playback before moving on
+    stopPulse();
+    if (player?.stop) {
+      try {
+        await player.stop();
+      } catch (e) {
+        // ignore
+      }
+    }
+    setAudioSource(null);
 
     if (currentQuestionIndex === questions.length - 1) {
       setIsUploading(true);
       try {
-        // Upload all audios at once
         const uploadedUrls = await Promise.all(
-          audioUris.map(async (uri) => {
-            const firebaseAudioURL = await uploadAudioToFirebase(uri);
-            return firebaseAudioURL;
-          })
+          audioUris.map((uri) => uploadAudioToFirebase(uri))
         );
-
-        console.log("✅ All uploaded audio URLs:", uploadedUrls);
-
-        // You can optionally replace local URIs with Firebase URLs
-        setAudioUris(uploadedUrls);
-
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-
         updateFormData({
           ...formData,
           audioUrls: uploadedUrls,
         });
-
-        // Navigate to next page
-        route.push("/ValidateOTP");
+        router.push("/ValidateOTP");
       } catch (err) {
         console.error(err);
         Alert.alert("Upload Failed", "Please try again.");
@@ -132,124 +208,153 @@ const UploadAudio = () => {
       return;
     }
 
-    // Move to next question
-    setCurrentQuestionIndex(currentQuestionIndex + 1);
-    setAudioSource(audioUris[currentQuestionIndex + 1]);
+    setCurrentQuestionIndex((idx) => idx + 1);
   };
 
-  // Congrats page
-  if (currentQuestionIndex >= questions.length) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.congratsText}>
-          🎉 Congrats! Your intro is ready.
-        </Text>
-        <TouchableOpacity
-          style={styles.nextButton}
-          onPress={() => console.log("Audio URLs:", audioUris)}
-        >
-          <Text style={styles.nextButtonText}>Next</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
+  const currentUri = audioUris[currentQuestionIndex];
+  const isRecording = recorderState.isRecording;
+  const isPlaying = !!playerStatus?.isPlaying;
 
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.questionText}>{questions[currentQuestionIndex]}</Text>
 
-      <View style={styles.controls}>
-        <TouchableOpacity
-          style={[
-            styles.recordButton,
-            recorderState.isRecording && { backgroundColor: "red" },
-          ]}
-          onPress={recorderState.isRecording ? stopRecording : startRecording}
-        >
-          <Text style={styles.recordButtonText}>
-            {recorderState.isRecording
-              ? "Stop"
-              : audioUris[currentQuestionIndex]
-              ? "Re-record"
-              : "Record"}
-          </Text>
-        </TouchableOpacity>
-
-        {audioUris[currentQuestionIndex] && !recorderState.isRecording && (
+      <View style={styles.centerContent}>
+        {/* --- Record State --- */}
+        {!currentUri && (
           <TouchableOpacity
-            style={styles.playButton}
-            onPress={() => playAudio(audioUris[currentQuestionIndex])}
+            activeOpacity={0.8}
+            onPressIn={startRecording}
+            onPressOut={stopRecording}
+            style={styles.holdButtonWrapper}
+            disabled={isPlaying || isUploading || isRecording}
           >
-            <Text style={styles.playButtonText}>Play</Text>
+            <Text style={styles.holdText}>
+              {isRecording ? "Recording..." : "Hold to Record"}
+            </Text>
+            <View style={{ height: 40 }} />
+            <Animated.View
+              style={[
+                styles.circleButton,
+                {
+                  transform: [{ scale: pulseAnim }],
+                  backgroundColor: isRecording ? "#FF1744" : "#2196F3",
+                },
+              ]}
+            >
+              <Mic color="#fff" size={38} />
+            </Animated.View>
           </TouchableOpacity>
         )}
 
-        {recorderState.isRecording && (
-          <ActivityIndicator size="large" color="#FF0000" />
+        {/* --- Preview State --- */}
+        {currentUri && !isRecording && (
+          <View style={styles.previewContainer}>
+            {/* Circular play button */}
+            <TouchableOpacity
+              onPress={() => playAudio(currentUri)}
+              disabled={isRecording || isUploading}
+            >
+              <Animated.View
+                style={[
+                  styles.circleButton,
+                  {
+                    transform: [{ scale: pulseAnim }],
+                    backgroundColor: isPlaying ? "#2E7D32" : "#43A047",
+                  },
+                ]}
+              >
+                <Play color="#fff" size={38} />
+              </Animated.View>
+            </TouchableOpacity>
+
+            {/* Controls below */}
+            <View style={styles.previewActions}>
+              <TouchableOpacity
+                style={[styles.rectButton, { backgroundColor: "#e53935" }]}
+                onPress={reRecord}
+                disabled={isPlaying || isUploading}
+              >
+                <RotateCcw color="#fff" size={22} />
+                <Text style={styles.optionText}>Re-record</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.rectButton, { backgroundColor: "#1E88E5" }]}
+                onPress={handleNext}
+                disabled={isUploading || isPlaying}
+              >
+                {isUploading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <ArrowRight color="#fff" size={22} />
+                    <Text style={styles.optionText}>Next</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
       </View>
-
-      <TouchableOpacity
-        style={styles.nextButton}
-        onPress={handleNext}
-        disabled={isUploading}
-      >
-        {isUploading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.nextButtonText}>
-            {currentQuestionIndex === questions.length - 1 ? "Finish" : "Next"}
-          </Text>
-        )}
-      </TouchableOpacity>
     </SafeAreaView>
   );
 };
 
+export default UploadAudio;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
   },
   questionText: {
-    fontSize: 22,
     color: "#fff",
+    fontSize: 22,
     textAlign: "center",
-    marginBottom: 40,
+    marginBottom: 60,
+    fontWeight: "600",
   },
-  controls: { alignItems: "center", marginBottom: 50 },
-  recordButton: {
-    padding: 20,
-    borderRadius: 50,
-    backgroundColor: "#4CAF50",
-    marginBottom: 20,
-  },
-  recordButtonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-  playButton: {
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: "#FF9800",
-    marginTop: 10,
-  },
-  playButtonText: { color: "#fff", fontSize: 16 },
-  nextButton: {
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: "#2196F3",
-    width: "60%",
+  centerContent: {
     alignItems: "center",
   },
-  nextButtonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-  congratsText: {
-    fontSize: 24,
-    fontWeight: "bold",
+  holdButtonWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  holdText: {
+    color: "#ccc",
+    fontSize: 16,
+    marginBottom: 25,
+  },
+  circleButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 100,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  previewContainer: {
+    alignItems: "center",
+  },
+  previewActions: {
+    flexDirection: "row",
+    gap: 25,
+    marginTop: 40,
+  },
+  rectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  optionText: {
     color: "#fff",
-    marginBottom: 30,
-    textAlign: "center",
+    fontWeight: "600",
   },
 });
-
-export default UploadAudio;
