@@ -11,7 +11,7 @@ const MainLayout = () => {
   useEffect(() => {
     if (typeof isAuthenticated == "undefined") return;
     else if (isAuthenticated) {
-      router.replace("/ChatPage");
+      router.replace("/UploadIDCard");
     } else if (isAuthenticated == false) {
       router.replace("EnterPhoneNumber");
     }
