@@ -4,15 +4,14 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
 } from "react-native";
-import { User, Play } from "lucide-react-native";
+import { User, Play, Pause, RotateCcw } from "lucide-react-native";
 import { calculateAge } from "../utilities/functions";
+import AudioIndicator from "./AudioIndicator";
 
-
-const SwipeCard = ({ user, replayAudio, status }) => {
+const SwipeCard = ({ user, replayAudio, status, pauseAudio }) => {
   const age = calculateAge(user.birthdate);
-
-
 
   return (
     <View style={styles.card}>
@@ -50,12 +49,24 @@ const SwipeCard = ({ user, replayAudio, status }) => {
       </View>
 
       {/* Replay Button */}
-      <TouchableOpacity style={styles.audioButton} onPress={replayAudio} disabled={status.isPlaying}>
-  <Play size={18} color="#fff" />
-  <Text style={styles.audioText}>
-    {status.playing ? "Playing..." : "Replay"}
-  </Text>
-</TouchableOpacity>
+      <AudioIndicator isPlaying={status.playing}/>
+      <TouchableOpacity
+        style={styles.audioButton}
+        onPress={replayAudio}
+        disabled={status.playing}
+      >
+        {!status.playing && <RotateCcw size={18} color="#fff"  />}
+        <Text style={styles.audioText}>
+          {status.playing ? "Playing..." : "Replay"}
+        </Text>
+      </TouchableOpacity>
+      {/* <TouchableOpacity
+        style={styles.audioButton}>
+            {status.playing ? <Pause size={18} color="#fff" /> : <Play size={18} color="#fff" />}
+          <Text style={styles.audioText}>
+            {status.playing ? "Pause" : "Play"}
+          </Text>
+        </TouchableOpacity> */}
     </View>
   );
 };

@@ -37,6 +37,7 @@ const ChatPage = () => {
   }, []);
 
   const openChatWindow = async (item) => {
+    if (!user) return;
     console.log(
       user.uid == item.users[0].uid ? item.users[1].uid : item.users[0].uid
     );

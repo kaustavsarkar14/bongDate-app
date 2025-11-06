@@ -35,7 +35,8 @@ const SwipePage = () => {
   const player = useAudioPlayer(audioSource);
   const status = useAudioPlayerStatus(player);
 
-  const handleAudioChange = (cardIndex) => {
+  const handleSwipe = (cardIndex) => {
+    console.log("first");
     if (cardIndex == users.length - 1) {
       return;
     }
@@ -46,14 +47,18 @@ const SwipePage = () => {
   };
   const handleSwipeLeft = (cardIndex) => {
     if (!users[cardIndex]) return;
-    handleAudioChange(cardIndex);
+    setUsers((prevUsers) =>
+      prevUsers.filter((_, index) => index !== cardIndex)
+    );
 
     const swipedUser = users[cardIndex];
     setDoc(doc(db, "users", user.uid, "passes", swipedUser.id), swipedUser);
   };
 
   const handleSwipeRight = async (cardIndex) => {
-    handleAudioChange(cardIndex);
+    setUsers((prevUsers) =>
+      prevUsers.filter((_, index) => index !== cardIndex)
+    );
     // const swipedUser = users[cardIndex];
     // setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
     // const checkIfOtherUserSwiped = await getDoc(
@@ -80,9 +85,7 @@ const SwipePage = () => {
     //   });
     // }
   };
-  const handleSwipeTop = async (cardIndex) => {
-    console.log(cardIndex);
-  };
+
   useEffect(() => {
     let unsub;
 
@@ -146,7 +149,10 @@ const SwipePage = () => {
     player.seekTo(0);
     player.play();
   };
-
+const pauseAudio = () => {
+  if (!player || !status.isLoaded) return; // check player exists and is loaded
+  player.pause();
+}
   useEffect(() => {
     console.log("audioSource" + audioSource);
     if (audioSource) {
@@ -188,13 +194,16 @@ const SwipePage = () => {
                 player={player}
                 status={status}
                 key={card.uid}
+                pauseAudio={pauseAudio}
               />
             );
           }}
           onSwipedLeft={(cardIndex) => handleSwipeLeft(cardIndex)}
           onSwipedRight={(cardIndex) => handleSwipeRight(cardIndex)}
-          onSwipedTop={(cardIndex) => handleSwipeTop(cardIndex)}
-          // onSwiped={handleSwipe}
+          onSwipedTop={() => {
+            console.log("swipped top");
+          }}
+          onSwiped={handleSwipe}
           cardIndex={0}
           stackSize={10}
         ></Swiper>
