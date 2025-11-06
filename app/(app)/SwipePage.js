@@ -59,31 +59,31 @@ const SwipePage = () => {
     setUsers((prevUsers) =>
       prevUsers.filter((_, index) => index !== cardIndex)
     );
-    // const swipedUser = users[cardIndex];
-    // setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
-    // const checkIfOtherUserSwiped = await getDoc(
-    //   doc(db, "users", swipedUser.uid, "likes", user.uid)
-    // );
-    // if (checkIfOtherUserSwiped.exists()) {
-    //   // create a chat
-    //   Toast.show({
-    //     type: "success",
-    //     text1: "You matched with " + swipedUser.name,
-    //   });
-    //   setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
-    //     isLocked: true,
-    //     users: [
-    //       {
-    //         uid: user.uid,
-    //         profileUnlockRequest: false,
-    //       },
-    //       {
-    //         uid: swipedUser.uid,
-    //         profileUnlockRequest: false,
-    //       },
-    //     ],
-    //   });
-    // }
+    const swipedUser = users[cardIndex];
+    setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
+    const checkIfOtherUserSwiped = await getDoc(
+      doc(db, "users", swipedUser.uid, "likes", user.uid)
+    );
+    if (checkIfOtherUserSwiped.exists()) {
+      // create a chat
+      Toast.show({
+        type: "success",
+        text1: "You matched with " + swipedUser.name,
+      });
+      setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
+        isLocked: true,
+        users: [
+          {
+            uid: user.uid,
+            profileUnlockRequest: false,
+          },
+          {
+            uid: swipedUser.uid,
+            profileUnlockRequest: false,
+          },
+        ],
+      });
+    }
   };
 
   useEffect(() => {

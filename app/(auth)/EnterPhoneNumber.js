@@ -34,11 +34,11 @@ const EnterPhoneNumber = () => {
     }
 
     setIsLoading(true);
-    updateFormData({ ...formData, phoneNumber });
+    updateFormData({ ...formData, phoneNumber: "+91" + phoneNumber.trim() });
     try {
       // 1. Create a query to check for the phone number in the "users" collection
       const usersRef = collection(db, "users");
-      const q = query(usersRef, where("phoneNumber", "==", phoneNumber.trim()));
+      const q = query(usersRef, where("phoneNumber", "==", "+91" + phoneNumber.trim()));
 
       // 2. Execute the query
       const querySnapshot = await getDocs(q);
