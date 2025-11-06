@@ -15,11 +15,19 @@ import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase.config";
 import Toast from "react-native-toast-message";
 import { getChatIdFromUserIds } from "../../utilities/functions";
+import SwipeCard from "../../components/SwipeCard";
+import { useAudioPlayer } from "expo-audio";
 
 const SwipePage = () => {
   const [users, setUsers] = useState(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+
+  const [audioSource, setAudioSource] = useState(
+    users?.[0]?.audioUrls?.[0] ?? null
+  );
+
+  const player = useAudioPlayer(audioSource);
 
   const handleSwipeLeft = (cardIndex) => {
     if (!users[cardIndex]) return;
@@ -30,33 +38,34 @@ const SwipePage = () => {
 
   const handleSwipeRight = async (cardIndex) => {
     if (!users[cardIndex]) return;
-    const swipedUser = users[cardIndex];
-    setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
+    setAudioSource(users[cardIndex + 1].audioUrls?.[0]);
+    // const swipedUser = users[cardIndex];
+    // setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
 
-    const checkIfOtherUserSwiped = await getDoc(
-      doc(db, "users", swipedUser.uid, "likes", user.uid)
-    );
+    // const checkIfOtherUserSwiped = await getDoc(
+    //   doc(db, "users", swipedUser.uid, "likes", user.uid)
+    // );
 
-    if (checkIfOtherUserSwiped.exists()) {
-      // create a chat
-      Toast.show({
-        type: "success",
-        text1: "You matched with " + swipedUser.name,
-      });
-      setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
-        isLocked: true,
-        users: [
-          {
-            uid: user.uid,
-            profileUnlockRequest: false,
-          },
-          {
-            uid: swipedUser.uid,
-            profileUnlockRequest: false,
-          },
-        ],
-      });
-    }
+    // if (checkIfOtherUserSwiped.exists()) {
+    //   // create a chat
+    //   Toast.show({
+    //     type: "success",
+    //     text1: "You matched with " + swipedUser.name,
+    //   });
+    //   setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
+    //     isLocked: true,
+    //     users: [
+    //       {
+    //         uid: user.uid,
+    //         profileUnlockRequest: false,
+    //       },
+    //       {
+    //         uid: swipedUser.uid,
+    //         profileUnlockRequest: false,
+    //       },
+    //     ],
+    //   });
+    // }
   };
 
   useEffect(() => {
@@ -112,12 +121,24 @@ const SwipePage = () => {
     };
 
     fetchUsers();
-
     // ✅ 6. Cleanup
     return () => {
       if (unsub) unsub();
     };
   }, []);
+
+  const replayAudio = () => {
+    player.seekTo(0);
+    player.play();
+  };
+  useEffect(() => {
+    console.log(audioSource);
+    if (audioSource) {
+      player.play();
+    }
+    return () => {};
+  }, [audioSource]);
+
   return (
     <View style={styles.container}>
       {!users || users.length === 0 ? (
@@ -131,11 +152,7 @@ const SwipePage = () => {
             setUsers(null);
           }}
           renderCard={(card) => {
-            return (
-              <View style={styles.card}>
-                <Text style={styles.text}>{card.name}</Text>
-              </View>
-            );
+            return <SwipeCard user={card} replayAudio={replayAudio} />;
           }}
           onSwipedLeft={(cardIndex) => handleSwipeLeft(cardIndex)}
           onSwipedRight={(cardIndex) => handleSwipeRight(cardIndex)}
