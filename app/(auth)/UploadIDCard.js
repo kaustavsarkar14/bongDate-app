@@ -85,7 +85,7 @@ const UploadIDCard = () => {
         idCardPhotoURL: uploadedImageLink,
       });
       console.log("✅ Uploaded ID card:", uploadedImageLink);
-      
+      router.push("UploadAudio");
     } catch (error) {
       console.error(error);
       Alert.alert("Upload Failed", error.message || "Please try again.");

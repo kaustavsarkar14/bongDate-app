@@ -42,7 +42,7 @@ const SwipePage = () => {
       Toast.show({
         type: "success",
         text1: "You matched with " + swipedUser.name,
-      })
+      });
       setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
         isLocked: true,
         users: [
@@ -117,7 +117,7 @@ const SwipePage = () => {
     return () => {
       if (unsub) unsub();
     };
-  }, [user.uid]);
+  }, []);
   return (
     <View style={styles.container}>
       {!users || users.length === 0 ? (
