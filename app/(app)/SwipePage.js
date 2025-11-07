@@ -22,6 +22,7 @@ import {
   useAudioSampleListener,
 } from "expo-audio";
 import SwipeCardDetail from "../../components/SwipeCardDetail";
+import { ActivityIndicator } from "react-native-web";
 
 const SwipePage = () => {
   const [users, setUsers] = useState(null);
@@ -124,6 +125,7 @@ const SwipePage = () => {
             (u) => !excludedIds.includes(u.uid) && u.uid !== user.uid
           );
           setUsers(filteredUsers);
+          setLoading(false);
         });
       } catch (error) {
         console.error("Error fetching users:", error);
@@ -149,10 +151,10 @@ const SwipePage = () => {
     player.seekTo(0);
     player.play();
   };
-const pauseAudio = () => {
-  if (!player || !status.isLoaded) return; // check player exists and is loaded
-  player.pause();
-}
+  const pauseAudio = () => {
+    if (!player || !status.isLoaded) return; // check player exists and is loaded
+    player.pause();
+  };
   useEffect(() => {
     console.log("audioSource" + audioSource);
     if (audioSource) {
@@ -171,10 +173,19 @@ const pauseAudio = () => {
     }
   }, [users]);
 
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
+  }
   return (
     <View style={styles.container}>
       {!users || users.length === 0 ? (
-        <Text>No more profiles</Text>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text style={{ fontSize: 20 }} >No more profiles 😢</Text>
+        </View>
       ) : (
         <Swiper
           key={`${users?.length}-${status.playing}`}
@@ -208,13 +219,13 @@ const pauseAudio = () => {
           stackSize={10}
         ></Swiper>
       )}
-      <TouchableOpacity
+      {/* <TouchableOpacity
         onPress={() => {
           setShowProfileModal(true);
         }}
       >
         <Text>Open Modal</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
 
       <SwipeCardDetail
         visible={showProfileModal}
