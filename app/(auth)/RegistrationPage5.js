@@ -14,11 +14,11 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRegistration } from "../../context/RegistrationDataContext";
 import { ChevronRight, Search } from "lucide-react-native"; // 2. Import Search icon
-import { ALL_INTERESTS } from "../../utilities/constants";
+import { ALL_INTERESTS_DATA } from "../../utilities/constants";
 
 // --- Mock Data for Interests ---
 // In a real app, you'd fetch this from a database
-const ALL_INTERESTS = ALL_INTERESTS
+const ALL_INTERESTS = ALL_INTERESTS_DATA;
   // Add more as needed
 
 // ------------------------------

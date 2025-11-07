@@ -59,7 +59,6 @@ const RegistrationPage7 = () => {
   );
 
   // Initialize state from user data (update) or form data (registration)
-  // This logic is correct and handles both sparse and compact arrays.
   const [photos, setPhotos] = useState(() => {
     const source = user?.photoURIs || formData?.photoURIs || [];
     const padded = [...source, ...Array(6 - source.length).fill(null)];
@@ -120,10 +119,7 @@ const RegistrationPage7 = () => {
 
       await Promise.all(uploadPromises);
       
-      // <-- FIX: REMOVED the .filter(Boolean) line
-      // const cleanURLs = finalURLs.filter(Boolean); // <-- OLD BUGGY LINE
-
-      // <-- FIX: Save the full sparse array (finalURLs) to preserve positions
+      // Save the full sparse array (finalURLs) to preserve positions
       console.log("Uploaded URLs (Registration):", finalURLs);
       updateFormData({ ...formData, photoURIs: finalURLs });
       router.push("FaceVerification");
@@ -145,19 +141,22 @@ const RegistrationPage7 = () => {
 
     try {
       // --- 1. Upload new files ---
+      // This part is correct. It uploads new files and keeps existing URLs/nulls.
       const uploadPromises = photos.map(async (uri, index) => {
         if (uri && uri.startsWith("file:")) {
-          // ... (upload logic is correct)
+          // This is a new local file. Upload it.
           console.log(`Uploading new file for slot ${index}...`);
           const response = await fetch(uri);
           const blob = await response.blob();
+
+          // Store in a user-specific path
           const fileRef = ref(storage, `users/${user.uid}/photo_${index}.jpg`);
           const uploadTask = uploadBytesResumable(fileRef, blob);
 
           return new Promise((resolve, reject) => {
             uploadTask.on(
               "state_changed",
-              null,
+              null, // no progress observer
               (error) => {
                 console.error("Upload failed for slot", index, error);
                 reject(error);
@@ -171,50 +170,57 @@ const RegistrationPage7 = () => {
             );
           });
         } else {
-          return uri; // Keeps 'http://' URL or 'null'
+          // This is 'http://' URL or 'null'. Keep it.
+          return uri;
         }
       });
 
-      // <-- FIX: This is now our final sparse array, do not filter it yet.
+      // This is the final sparse array of URLs and nulls
       const allFinalURLs = await Promise.all(uploadPromises);
-      // const cleanFinalURLs = allFinalURLs.filter(Boolean); // <-- OLD BUGGY LINE
 
       // --- 2. Delete removed files ---
-      // We can create temporary *compact* sets for comparison
-      const originalUrlsSet = new Set(originalPhotos.filter(Boolean));
-      // <-- FIX: Create a compact set from the new sparse array for comparison
-      const finalUrlsSet = new Set(allFinalURLs.filter(Boolean)); 
+      // <-- START OF FIX ---
+      // The OLD logic compared two sets of URLs, which caused the race condition.
+      // The NEW logic iterates through the slots. We only delete an original
+      // photo if its slot is now explicitly 'null'.
+      
       const deletePromises = [];
+      originalPhotos.forEach((originalUrl, index) => {
+        const newUriOrUrl = photos[index]; // Get the value from the *current* UI state
 
-      originalUrlsSet.forEach((url) => {
-        if (!finalUrlsSet.has(url)) {
-          // This URL was removed. Delete it from Storage.
-          console.log("Deleting old photo:", url);
+        // If there WAS a URL, and now there is NOTHING (null) in that slot...
+        if (originalUrl && !newUriOrUrl) {
+          // ...then the user removed it. Delete it.
+          console.log(`Deleting old photo from slot ${index}:`, originalUrl);
           try {
-            const deleteRef = ref(storage, url); // Get ref from URL
+            const deleteRef = ref(storage, originalUrl); // Get ref from URL
             deletePromises.push(deleteObject(deleteRef));
           } catch (error) {
-            console.warn("Could not create delete ref for:", url, error);
+            // Log and ignore errors
+            console.warn("Could not create delete ref for:", originalUrl, error);
           }
         }
+        // If (originalUrl && newUriOrUrl) -> This is a *replacement*, do NOT delete.
+        // The upload logic has already overwritten the file.
       });
+      // <-- END OF FIX ---
 
       await Promise.all(deletePromises);
 
       // --- 3. Update Firestore Document ---
-      // <-- FIX: Save the full sparse array (allFinalURLs)
+      // This part (saving the sparse array) was already correct from last time.
       console.log("Updating user profile with new URLs:", allFinalURLs);
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
-        photoURIs: allFinalURLs, 
+        photoURIs: allFinalURLs,
       });
 
-      // --- 4. Update local AuthContext user state ---
+      // --- 4. (NEW) Update local AuthContext user state ---
+      // This part is also correct.
       if (setUser) {
         setUser({
           ...user,
-          // <-- FIX: Update local state with the full sparse array
-          photoURIs: allFinalURLs,
+          photoURIs: allFinalURLs, // Overwrite with new photos
         });
       } else {
         console.warn(
@@ -223,9 +229,8 @@ const RegistrationPage7 = () => {
       }
 
       Alert.alert("Profile Updated", "Your photos have been saved.");
-      router.push("ProfilePage");
-    } catch (error)
-    {
+      router.push("ProfilePage"); // <-- As requested
+    } catch (error) {
       console.error("Profile update failed:", error);
       Alert.alert(
         "Update Failed",
@@ -258,8 +263,7 @@ const RegistrationPage7 = () => {
     if (isUpdateMode) {
       router.back(); // In update mode, "Skip" is "Cancel"
     } else {
-      // <-- FIX: Also save a sparse array here if skipping
-      updateFormData({ photoURIs: Array(6).fill(null) }); 
+      updateFormData({ photoURIs: Array(6).fill(null) });
       router.push("FaceVerification");
     }
   };
@@ -274,7 +278,6 @@ const RegistrationPage7 = () => {
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ... (UI code is unchanged) ... */}
           <Text style={styles.title}>
             {isUpdateMode ? "Update your photos" : "Add your photos"}
           </Text>
@@ -317,7 +320,6 @@ const RegistrationPage7 = () => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          {/* ... (UI code is unchanged) ... */}
           <TouchableOpacity onPress={handleSkipOrBack} disabled={isUploading}>
             <Text style={styles.skipButton}>
               {isUpdateMode ? "Cancel" : "Skip"}

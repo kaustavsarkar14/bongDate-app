@@ -6,40 +6,30 @@ import {
   Image,
   ScrollView,
   Dimensions,
-  ActivityIndicator,
+  ActivityIndicator, // <-- Import ActivityIndicator
+  Alert,
 } from "react-native";
-import { LogOut, Pencil } from "lucide-react-native";
+// 1. IMPORT ICONS
+import { LogOut, Pencil, Play, Pause, RefreshCw } from "lucide-react-native";
 import { useAuth } from "../../context/AuthContext";
-// UPDATED: Added useFocusEffect
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-// UPDATED: Added useCallback, removed useEffect
-import React, { useState, useCallback } from "react";
-// UPDATED: Added onSnapshot, removed getDoc
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase.config";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ALL_INTERESTS_DATA } from "../../utilities/constants";
+import { calculateAge } from "../../utilities/functions";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
 const { width } = Dimensions.get("window");
 const PHOTO_GUTTER = 8;
 const PHOTO_SIZE = (width - 20 * 2 - PHOTO_GUTTER * 2) / 3;
 
-// --- Helper: Calculate Age ---
-const calculateAge = (birthdate) => {
-  if (!birthdate) return "?";
-  try {
-    const today = new Date();
-    const birthDate = new Date(birthdate);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  } catch (error) {
-    console.error("Error calculating age:", error);
-    return "?";
-  }
-};
+// CREATE LOOKUP MAP
+const interestsMap = ALL_INTERESTS_DATA.reduce((acc, item) => {
+  acc[item.slug] = item;
+  return acc;
+}, {});
 
 // --- Helper: Section Header ---
 const SectionHeader = ({ title, onEdit, isMyProfile }) => (
@@ -69,59 +59,100 @@ const UserProfile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMyProfile, setIsMyProfile] = useState(false);
 
-  // UPDATED: Replaced useEffect with useFocusEffect and onSnapshot
+  // --- AUDIO PLAYER SETUP ---
+  const player = useAudioPlayer(null);
+  const playerStatus = useAudioPlayerStatus(player);
+  const [currentPlayingUrl, setCurrentPlayingUrl] = useState(null);
+
+  // Ref to prevent crash on unmount
+  const isUnmounted = useRef(false);
+
+  // --- HOOK FOR FOCUS/BLUR ---
   useFocusEffect(
     useCallback(() => {
+      isUnmounted.current = false;
       setIsLoading(true);
-
-      // Determine which user ID to fetch
       const targetUserId = userId || loggedInUser?.uid;
 
-      // If no user to show (logged out, no param), then stop.
       if (!targetUserId) {
         setIsMyProfile(false);
         setProfileUser(null);
         setIsLoading(false);
-        return; // Exit early
+        return;
       }
 
-      // Check if the profile we are viewing is our own
       const isMe = loggedInUser?.uid === targetUserId;
       setIsMyProfile(isMe);
 
-      // --- KEY FIX ---
-      // Set up the real-time listener
       const userDocRef = doc(db, "users", targetUserId);
-
       const unsubscribe = onSnapshot(
         userDocRef,
         (docSnap) => {
-          // This code runs immediately AND every time the data changes
           if (docSnap.exists()) {
             setProfileUser(docSnap.data());
           } else {
             console.error("No such user found!");
             setProfileUser(null);
           }
-          setIsLoading(false); // Stop loading after data is fetched/updated
+          setIsLoading(false);
         },
         (error) => {
-          // Handle any errors
           console.error("Error listening to user doc:", error);
           setProfileUser(null);
           setIsLoading(false);
         }
       );
 
-      // Return the 'cleanup' function.
-      // This runs when the screen loses focus, stopping the listener.
+      // Cleanup on blur
       return () => {
         unsubscribe();
+        if (!isUnmounted.current) {
+          // player.pause();
+          setCurrentPlayingUrl(null);
+        }
       };
-    }, [userId, loggedInUser]) // Dependencies for useCallback
+    }, [userId, loggedInUser, player])
   );
 
-  // --- Render ---
+  // --- HOOK FOR MOUNT/UNMOUNT ---
+  useEffect(() => {
+    isUnmounted.current = false;
+    // Cleanup on unmount
+    return () => {
+      isUnmounted.current = true;
+      // player.remove(); // This prevents memory leaks
+    };
+  }, [player]);
+
+  // --- 2. UPDATED AUDIO PLAY/PAUSE FUNCTION ---
+  const playAudio = async (uri) => {
+    try {
+      if (currentPlayingUrl === uri) {
+        // --- It's the SAME track ---
+        if (playerStatus.isPlaying) {
+          // 1. Is playing -> PAUSE
+          await player.pause();
+        } else {
+          // 2. Is paused or finished -> PLAY
+          
+          // 3. (NEW) If it finished, rewind to start
+          if (playerStatus.didJustFinish) {
+            await player.seekTo(0);
+          }
+          await player.play();
+        }
+      } else {
+        // --- It's a NEW track ---
+        setCurrentPlayingUrl(uri);
+        await player.replace(uri);
+        await player.play();
+      }
+    } catch (error) {
+      console.error("Failed to play audio", error);
+      Alert.alert("Error", "Failed to play audio.");
+    }
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.safeArea, styles.centerContainer]}>
@@ -138,7 +169,6 @@ const UserProfile = () => {
     );
   }
 
-  // Data for the loaded profile
   const age = calculateAge(profileUser.birthdate);
   const profileImage =
     profileUser.photoURIs && profileUser.photoURIs.length > 0
@@ -156,7 +186,7 @@ const UserProfile = () => {
           {profileImage ? (
             <Image source={{ uri: profileImage }} style={styles.profileImage} />
           ) : (
-            <PlaceholderImage /> // Use safe placeholder
+            <PlaceholderImage />
           )}
           <View style={styles.infoContainer}>
             <Text style={styles.nameText} numberOfLines={1}>
@@ -171,29 +201,88 @@ const UserProfile = () => {
           </View>
         </View>
 
-        {/* --- Photos --- */}
-        <SectionHeader
-          title={isMyProfile ? "My Photos" : "Photos"}
-          isMyProfile={isMyProfile}
-          onEdit={() => router.push("RegistrationPage7")} // Re-uses the photo page
-        />
-        <View style={styles.photoGridContainer}>
-          {profileUser.photoURIs?.map((uri, index) => (
-            <Image key={index} source={{ uri }} style={styles.photoGridItem} />
-          ))}
-        </View>
-
         {/* --- Interests --- */}
         <SectionHeader
           title={isMyProfile ? "My Interests" : "Interests"}
           isMyProfile={isMyProfile}
-          onEdit={() => router.push("EditInterests")} // Navigates to a new page
+          onEdit={() => router.push("EditInterests")}
         />
         <View style={styles.interestsContainer}>
-          {profileUser.interests?.map((interest, index) => (
-            <View key={index} style={styles.interestPill}>
-              <Text style={styles.interestText}>{interest}</Text>
+          {profileUser.interests?.map((interestSlug) => {
+            // ... (your interest logic is correct)
+            const interestData = interestsMap[interestSlug];
+            if (!interestData) {
+              return (
+                <View key={interestSlug} style={styles.interestPill}>
+                  <Text style={styles.interestText}>{interestSlug}</Text>
+                </View>
+              );
+            }
+            return (
+              <View key={interestData.slug} style={styles.interestPill}>
+                <Text style={styles.interestEmoji}>{interestData.emoji}</Text>
+                <Text style={styles.interestText}>{interestData.label}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* --- 3. UPDATED AUDIO PLAYER UI --- */}
+        {profileUser.audioUrls?.map((audioUrl, index) => {
+          const isThisTrackActive = currentPlayingUrl === audioUrl;
+
+          // Derive states from playerStatus
+          const isLoading =
+            isThisTrackActive &&
+            playerStatus.isBuffering &&
+            !playerStatus.isPlaying;
+          const isPlaying = isThisTrackActive && playerStatus.isPlaying;
+          const didFinish = isThisTrackActive && playerStatus.didJustFinish;
+
+          let icon;
+          let text;
+
+          if (isLoading) {
+            // State 1: Loading
+            icon = <ActivityIndicator color="#fff" size={24} />;
+            text = "Loading...";
+          } else if (isPlaying) {
+            // State 2: Playing
+            icon = <Pause color="#fff" size={24} fill="#fff" />;
+            text = "Pause";
+          } else if (didFinish) {
+            // State 3: Finished (Ready for Replay)
+            icon = <RefreshCw color="#fff" size={24} />;
+            text = `Replay Note ${index + 1}`;
+          } else {
+            // State 4: Default (Paused or ready to play)
+            icon = <Play color="#fff" size={24} fill="#fff" />;
+            text = `Play Voice Note ${index + 1}`;
+          }
+
+          return (
+            <View key={index} style={styles.audioPlayer}>
+              <TouchableOpacity
+                onPress={() => playAudio(audioUrl)}
+                style={styles.audioButton}
+                disabled={isLoading} // Disable button only while loading
+              >
+                <View style={styles.audioIconContainer}>{icon}</View>
+                <Text style={styles.audioButtonText}>{text}</Text>
+              </TouchableOpacity>
             </View>
+          );
+        })}
+
+        {/* --- Photos --- */}
+        <SectionHeader
+          title={isMyProfile ? "My Photos" : "Photos"}
+          isMyProfile={isMyProfile}
+          onEdit={() => router.push("RegistrationPage7")}
+        />
+        <View style={styles.photoGridContainer}>
+          {profileUser.photoURIs?.map((uri, index) => (
+            <Image key={index} source={{ uri }} style={styles.photoGridItem} />
           ))}
         </View>
 
@@ -209,6 +298,7 @@ const UserProfile = () => {
   );
 };
 
+// --- 4. UPDATED STYLES ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -294,7 +384,7 @@ const styles = StyleSheet.create({
   },
   photoGridItem: {
     width: PHOTO_SIZE,
-    height: PHOTO_SIZE * 1.25, // Aspect ratio 3:4
+    height: PHOTO_SIZE * 1.25,
     borderRadius: 10,
     backgroundColor: "#eee",
     marginHorizontal: PHOTO_GUTTER / 2,
@@ -306,6 +396,8 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   interestPill: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#f0f0f0",
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -313,11 +405,40 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 8,
   },
+  interestEmoji: {
+    fontSize: 14,
+    marginRight: 6,
+  },
   interestText: {
     fontSize: 14,
     color: "#333",
     fontWeight: "500",
-    textTransform: "capitalize",
+  },
+  // Audio
+  audioPlayer: {
+    marginBottom: 10,
+    marginTop: 10,
+  },
+  audioButton: {
+    backgroundColor: "#E91E63",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignItems: "center",
+    flexDirection: "row", // <-- Make button row for icon + text
+    justifyContent: "center", // <-- Center icon and text
+  },
+  audioIconContainer: {
+    width: 24, // Give icon a fixed width
+    height: 24, // Give icon a fixed height
+    marginRight: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   // Logout
   logoutButton: {

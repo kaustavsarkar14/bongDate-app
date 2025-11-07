@@ -1,4 +1,4 @@
-export const ALL_INTERESTS = [
+export const ALL_INTERESTS_DATA = [
   { slug: "museums", label: "Museums & galleries", emoji: "🏛️" },
   { slug: "skiing", label: "Skiing", emoji: "⛷️" },
   { slug: "crafts", label: "Crafts", emoji: "✍️" },
