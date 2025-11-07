@@ -1,23 +1,94 @@
 import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router"; // Import useRouter
-import { ArrowLeft } from "lucide-react-native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { ArrowLeft, EllipsisVertical } from "lucide-react-native";
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuProvider,
+  MenuTrigger,
+} from "react-native-popup-menu";
+import { Alert } from "react-native";
+import { useAuth } from "../context/AuthContext";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase.config";
+import { getChatIdFromUserIds } from "../utilities/functions";
 
-// This logic should be inside your _layout.js file's Stack
-const ChatWindowHeader = ({ otherUsername }) => {
-  const params = useLocalSearchParams();
+const ChatWindowHeader = ({
+  otherUsername,
+  otherUserId,
+  photoURL,
+  profileUnlockRequestByUser,
+  profileUnlockRequestByOtherUser,
+}) => {
   const router = useRouter();
-  // This function handles navigation to the profile
+  const { user } = useAuth();
 
-  console.log("header", otherUsername);
   const handleProfilePress = () => {
-    // Assuming you have the user's ID in params
-    if (params.userId) {
-      router.push(`/profile/${params.userId}`);
+    if (
+      profileUnlockRequestByUser === "true" &&
+      profileUnlockRequestByOtherUser === "true"
+    ) {
+      router.push({
+        pathname: "UserProfile",
+        params: {
+          userId: otherUserId,
+        },
+      });
     } else {
-      console.log("Cannot navigate: No user ID provided in params");
+      requestProfileUnlockConfirmation();
     }
   };
-  console.log("chatheafer", otherUsername);
+
+  const requestProfileUnlockConfirmation = () => {
+    Alert.alert(
+      "Confirm",
+      "Do you want to request to unlock this profile?",
+      [
+        {
+          text: "No",
+          onPress: () => console.log("User pressed No"),
+          style: "cancel", // makes it look like a cancel button
+        },
+        {
+          text: "Yes",
+          onPress: () => requestProfileUnlock(),
+        },
+      ],
+      { cancelable: true } // user can dismiss by tapping outside
+    );
+  };
+
+  const requestProfileUnlock = async () => {
+    try {
+      const chatRef = doc(
+        db,
+        "chats",
+        getChatIdFromUserIds(user.uid, otherUserId)
+      );
+      const chatSnap = await getDoc(chatRef);
+
+      if (!chatSnap.exists()) {
+        console.log("Chat not found");
+        return;
+      }
+
+      const chatData = chatSnap.data();
+      const usersArray = chatData.users || [];
+
+      const updatedUsers = usersArray.map((usr) => {
+        if (usr.uid == user.uid) {
+          return { ...usr, profileUnlockRequest: true };
+        }
+        return usr;
+      });
+
+      await updateDoc(chatRef, { users: updatedUsers });
+    } catch (error) {
+      console.error("Error updating profile unlock:", error);
+    }
+  };
+
   return (
     <Stack.Screen
       options={{
@@ -26,10 +97,8 @@ const ChatWindowHeader = ({ otherUsername }) => {
           backgroundColor: "#FFFFFF",
         },
         headerShadowVisible: false,
-
         headerLeft: () => (
-          <View style={styles.headerLeftContainer}>
-            {/* 1. Back Button */}
+          <View style={styles.leftContainer}>
             <TouchableOpacity
               onPress={() => router.back()}
               style={styles.backButton}
@@ -37,7 +106,6 @@ const ChatWindowHeader = ({ otherUsername }) => {
               <ArrowLeft size={26} color="black" />
             </TouchableOpacity>
 
-            {/* 2. Profile Button (Image + Name) */}
             <TouchableOpacity
               style={styles.profileButton}
               onPress={handleProfilePress}
@@ -45,7 +113,7 @@ const ChatWindowHeader = ({ otherUsername }) => {
               <Image
                 source={{
                   uri:
-                    params?.photoURL ||
+                    photoURL ||
                     "https://ps.w.org/shortpixel-image-optimiser/assets/icon-256x256.gif?rev=3245715",
                 }}
                 style={styles.profileImage}
@@ -56,15 +124,40 @@ const ChatWindowHeader = ({ otherUsername }) => {
             </TouchableOpacity>
           </View>
         ),
+        headerRight: () => (
+          <Menu>
+            <MenuTrigger>
+              <EllipsisVertical size={24} color="black" />
+            </MenuTrigger>
+            <MenuOptions>
+              <MenuOption
+                onSelect={() => handleProfilePress()}
+                disabled={
+                  profileUnlockRequestByUser === "true" &&
+                  profileUnlockRequestByOtherUser === "true"
+                }
+                text="Request Profile Reveal"
+              />
+              {/* <MenuOption onSelect={() => alert("Delete")}>
+                <Text style={{ color: "red" }}>Delete</Text>
+              </MenuOption> */}
+              {/* <MenuOption
+                onSelect={() => alert("Not called")}
+                disabled
+                text="Disabled"
+              /> */}
+            </MenuOptions>
+          </Menu>
+        ),
       }}
     />
   );
 };
 
-export default ChatWindowHeader; // This component is your _layout.js default export
+export default ChatWindowHeader;
 
 const styles = StyleSheet.create({
-  headerLeftContainer: {
+  leftContainer: {
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 1,
@@ -76,7 +169,7 @@ const styles = StyleSheet.create({
   profileButton: {
     flexDirection: "row",
     alignItems: "center",
-    flexShrink: 1, // Ensures name doesn't push off-screen
+    flexShrink: 1,
     marginLeft: 10,
   },
   profileImage: {
@@ -87,7 +180,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   name: {
-    color: "#000000", // Changed to black for visibility
+    color: "#000",
     fontSize: 18,
     fontWeight: "bold",
     flexShrink: 1,

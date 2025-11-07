@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { doc, getDoc } from "firebase/firestore";
+import { formatTimeGap } from "../utilities/functions";
 
 const ChatItem = ({ onPress, chat }) => {
   const { user, getUser } = useAuth();
@@ -45,7 +46,7 @@ const ChatItem = ({ onPress, chat }) => {
             {chat.lastMessage?.text || "Say Hello!! 👋"}
           </Text>
         </View>
-        <Text style={styles.timeText}>{chat.time}</Text>
+        <Text style={styles.timeText}>{formatTimeGap(chat.lastMessage?.timestamp)}</Text>
       </View>
     </TouchableOpacity>
   );

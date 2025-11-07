@@ -5,7 +5,13 @@ import {
   getDocs,
   onSnapshot,
 } from "firebase/firestore";
-import { FlatList, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import ChatItem from "../../components/ChatItem";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase.config";
@@ -18,6 +24,7 @@ const ChatPage = () => {
   const router = useRouter();
 
   const [chats, setChats] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // reference to "chats" collection
@@ -32,6 +39,7 @@ const ChatPage = () => {
       console.log(chatList);
 
       setChats(chatList.filter((chat) => chat.id.includes(user.uid)));
+      setLoading(false);
     });
 
     // cleanup listener on unmount
@@ -48,21 +56,36 @@ const ChatPage = () => {
       params: {
         otherUserId:
           user.uid == item.users[0].uid ? item.users[1].uid : item.users[0].uid,
-        otherUsername: "text",
+        profileUnlockRequestByUser: item.users.find(
+          (usr) => usr.uid == user.uid
+        ).profileUnlockRequest,
+        profileUnlockRequestByOtherUser: item.users.find(
+          (usr) =>
+            usr.uid ==
+            (user.uid == item.users[0].uid
+              ? item.users[1].uid
+              : item.users[0].uid)
+        ).profileUnlockRequest,
       },
     });
   };
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator size="large" color="#e600ffff" />
+      </SafeAreaView>
+    );
+  }
 
   if (!chats || chats.length == 0) {
     return (
-      <SafeAreaView>
-        <Text>no chats</Text>
+      <SafeAreaView style={styles.container}>
+        <Text>No chats</Text>
       </SafeAreaView>
     );
   }
   return (
     <View>
-      <Text>ChatPage</Text>
       <FlatList
         data={chats}
         keyExtractor={(chat) => chat.id}
@@ -79,3 +102,11 @@ const ChatPage = () => {
 };
 
 export default ChatPage;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

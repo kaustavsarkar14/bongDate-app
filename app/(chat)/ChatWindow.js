@@ -7,7 +7,8 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
+  // Import FlatList
+  FlatList,
 } from "react-native";
 import ChatWindowHeader from "../../components/ChatWindowHeader";
 import { Send } from "lucide-react-native";
@@ -29,18 +30,25 @@ import { db } from "../../firebase.config";
 import { useLocalSearchParams } from "expo-router";
 
 const ChatWindow = () => {
-  const { otherUserId } = useLocalSearchParams();
+  const {
+    otherUserId,
+    profileUnlockRequestByUser,
+    profileUnlockRequestByOtherUser,
+  } = useLocalSearchParams();
   const [otherUsername, setOtherUsername] = useState("Loading...");
   const { user, getUser } = useAuth();
   const [messages, setMessages] = useState([]);
 
-  const [inputText, setInputText] = useState("");
-  const scrollViewRef = useRef();
 
-  const setUserDetails= async()=> {
+  const inputTextRef = useRef("");
+  const inputComponentRef = useRef(null);
+  const flatListRef = useRef(); // Renamed from scrollViewRef for clarity
+
+  const setUserDetails = async () => {
     const otherUserData = await getUser(otherUserId);
-    setOtherUsername(otherUserData.name)
-  }
+    setOtherUsername(otherUserData.name);
+  };
+
   useEffect(() => {
     const docRef = doc(
       db,
@@ -58,13 +66,19 @@ const ChatWindow = () => {
       setMessages(allMessages);
     });
 
-    setUserDetails()
+    setUserDetails();
     return unsub;
   }, []);
 
   const handleSend = async () => {
-    if (!inputText.trim()) return;
-    setInputText("");
+    const messageText = inputTextRef.current.trim();
+
+    if (!messageText) return;
+
+    // Clear the ref and the input component
+    inputTextRef.current = "";
+    inputComponentRef.current?.clear();
+    // --- Changes End ---
 
     try {
       const docRef = doc(
@@ -76,22 +90,21 @@ const ChatWindow = () => {
       const messageRef = collection(docRef, "messages");
       const newDoc = await addDoc(messageRef, {
         userId: user.uid,
-        message: inputText,
+        message: messageText,
         timestamp: serverTimestamp(),
       });
 
-    
-     await setDoc(
-      docRef,
-      {
-        lastMessage: {
-          text: inputText,
-          senderId: user.uid,
-          timestamp: serverTimestamp(),
+      await setDoc(
+        docRef,
+        {
+          lastMessage: {
+            text: messageText,
+            senderId: user.uid,
+            timestamp: serverTimestamp(),
+          },
         },
-      },
-      { merge: true } // ensures we only update the field, not overwrite the whole document
-    );
+        { merge: true }
+      );
     } catch (error) {
       console.log(error);
       Toast.show({
@@ -100,47 +113,58 @@ const ChatWindow = () => {
       });
     }
   };
+
+  const renderMessage = ({ item: msg }) => (
+    <View
+      key={msg.id} // key is still good practice, though FlatList handles it
+      style={[
+        styles.messageBubble,
+        msg.userId === user.uid ? styles.myMessage : styles.otherMessage,
+      ]}
+    >
+      <Text style={styles.messageText}>{msg.message}</Text>
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 80}
     >
-      {/* Header */}
-      <ChatWindowHeader otherUsername={otherUsername} />
+      <ChatWindowHeader
+        otherUsername={otherUsername}
+        otherUserId={otherUserId}
+        profileUnlockRequestByUser={profileUnlockRequestByUser}
+        profileUnlockRequestByOtherUser={profileUnlockRequestByOtherUser}
+      />
 
-      {/* Messages */}
-      <ScrollView
-        ref={scrollViewRef}
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesContainer}
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() =>
-          scrollViewRef.current?.scrollToEnd({ animated: true })
+          flatListRef.current?.scrollToEnd({ animated: true })
         }
-      >
-        {messages.length > 0 &&
-          messages.map((msg) => (
-            <View
-              key={msg.id}
-              style={[
-                styles.messageBubble,
-                msg.userId === user.uid
-                  ? styles.myMessage
-                  : styles.otherMessage,
-              ]}
-            >
-              <Text style={styles.messageText}>{msg.message}</Text>
-            </View>
-          ))}
-      </ScrollView>
+        onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+      />
 
       {/* Input Section */}
       <View style={styles.inputContainer}>
         <TextInput
+          // --- Changes Start ---
+          ref={inputComponentRef}
+          // Removed `value` prop
+          // Set `defaultValue` so it's initially empty
+          defaultValue=""
+          // Update the ref's current value on change
+          onChangeText={(text) => (inputTextRef.current = text)}
+          // --- Changes End ---
           style={styles.input}
           placeholder="Type a message..."
-          value={inputText}
-          onChangeText={setInputText}
           multiline
         />
         <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
@@ -153,6 +177,7 @@ const ChatWindow = () => {
 
 export default ChatWindow;
 
+// Styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
