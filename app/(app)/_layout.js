@@ -4,7 +4,12 @@ import { GalleryVerticalEnd, MessageCircleHeart, UserRound } from "lucide-react-
 
 const _layout = () => {
   return (
-    <Tabs screenOptions={{ header: () => <HomeHeader /> }}>
+    <Tabs
+      screenOptions={{
+        // Default header for all screens
+        header: () => <HomeHeader />,
+      }}
+    >
       <Tabs.Screen
         name="ChatPage"
         options={{
@@ -12,14 +17,24 @@ const _layout = () => {
           tabBarIcon: ({ color }) => <MessageCircleHeart />,
         }}
       />
-      <Tabs.Screen name="SwipePage"  options={{
+
+      <Tabs.Screen
+        name="SwipePage"
+        options={{
           title: "Explore",
-          tabBarIcon: ({ color }) => <GalleryVerticalEnd />
-        }} />
-      <Tabs.Screen name="ProfilePage"   options={{
+          tabBarIcon: ({ color }) => <GalleryVerticalEnd />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="ProfilePage"
+        options={{
           title: "Profile",
           tabBarIcon: ({ color }) => <UserRound />,
-        }} />
+          // Disable header for this screen
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 };

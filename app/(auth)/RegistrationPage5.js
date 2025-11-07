@@ -14,37 +14,13 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRegistration } from "../../context/RegistrationDataContext";
 import { ChevronRight, Search } from "lucide-react-native"; // 2. Import Search icon
+import { ALL_INTERESTS } from "../../utilities/constants";
 
 // --- Mock Data for Interests ---
 // In a real app, you'd fetch this from a database
-const ALL_INTERESTS = [
-  { slug: "museums", label: "Museums & galleries", emoji: "🏛️" },
-  { slug: "skiing", label: "Skiing", emoji: "⛷️" },
-  { slug: "crafts", label: "Crafts", emoji: "✍️" },
-  { slug: "country", label: "Country", emoji: "🎵" },
-  { slug: "coffee", label: "Coffee", emoji: "☕" },
-  { slug: "gardening", label: "Gardening", emoji: "🌱" },
-  { slug: "foodie", label: "Foodie", emoji: "🍔" },
-  { slug: "lgbtq-rights", label: "LGBTQ+ rights", emoji: "🏳️‍🌈" },
-  { slug: "tennis", label: "Tennis", emoji: "🎾" },
-  { slug: "writing", label: "Writing", emoji: "📝" },
-  { slug: "art", label: "Art", emoji: "🎨" },
-  { slug: "exploring", label: "Exploring new cities", emoji: "🏙️" },
-  { slug: "horror", label: "Horror", emoji: "👻" },
-  { slug: "vegetarian", label: "Vegetarian", emoji: "🥦" },
-  { slug: "camping", label: "Camping", emoji: "🏕️" },
-  { slug: "cats", label: "Cats", emoji: "🐈" },
-  { slug: "hiking", label: "Hiking trips", emoji: "⛰️" },
-  { slug: "concerts", label: "Concerts", emoji: "🎤" },
-  { slug: "wine", label: "Wine", emoji: "🍷" },
-  { slug: "festivals", label: "Festivals", emoji: "🎉" },
-  { slug: "baking", label: "Baking", emoji: "🍰" },
-  { slug: "dancing", label: "Dancing", emoji: "💃" },
-  { slug: "yoga", label: "Yoga", emoji: "🧘" },
-  { slug: "dogs", label: "Dogs", emoji: "🐕" },
-  { slug: "rnb", label: "R&B", emoji: "🎶" },
+const ALL_INTERESTS = ALL_INTERESTS
   // Add more as needed
-];
+
 // ------------------------------
 
 // Next button icon
