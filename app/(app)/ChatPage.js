@@ -11,12 +11,13 @@ import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase.config";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const ChatPage = () => {
   const { user, getUser } = useAuth();
   const router = useRouter();
 
-  const [chats, setChats] = useState([]);
+  const [chats, setChats] = useState(null);
 
   useEffect(() => {
     // reference to "chats" collection
@@ -29,7 +30,8 @@ const ChatPage = () => {
         ...doc.data(),
       }));
       console.log(chatList);
-      setChats(chatList);
+
+      setChats(chatList.filter((chat) => chat.id.includes(user.uid)));
     });
 
     // cleanup listener on unmount
@@ -51,8 +53,16 @@ const ChatPage = () => {
     });
   };
 
+  if (!chats || chats.length == 0) {
+    return (
+      <SafeAreaView>
+        <Text>no chats</Text>
+      </SafeAreaView>
+    );
+  }
   return (
     <View>
+      <Text>ChatPage</Text>
       <FlatList
         data={chats}
         keyExtractor={(chat) => chat.id}
