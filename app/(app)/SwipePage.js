@@ -3,13 +3,19 @@ import {
   doc,
   getDoc,
   getDocs,
-  onSnapshot,
+  onSnapshot, 
   query,
   setDoc,
   where,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Swiper from "react-native-deck-swiper";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase.config";
@@ -22,7 +28,6 @@ import {
   useAudioSampleListener,
 } from "expo-audio";
 import SwipeCardDetail from "../../components/SwipeCardDetail";
-import { ActivityIndicator } from "react-native-web";
 
 const SwipePage = () => {
   const [users, setUsers] = useState(null);
@@ -88,8 +93,6 @@ const SwipePage = () => {
   };
 
   useEffect(() => {
-    let unsub;
-
     const fetchUsers = async () => {
       try {
         // ✅ 1. Fetch passed user IDs
@@ -109,24 +112,26 @@ const SwipePage = () => {
           ...new Set([
             ...passedUserIds,
             ...swipedUserIds,
-            user.uid, // or user.id if that’s how you store it
+            user.uid,
           ]),
         ];
 
-        // ✅ 4. Real-time listener for all users
-        unsub = onSnapshot(collection(db, "users"), (snapshot) => {
-          const allUsers = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
+        // ✅ 4. Fetch all users ONCE using getDocs
+        const usersSnapshot = await getDocs(collection(db, "users"));
 
-          // ✅ 5. Filter out excluded users
-          const filteredUsers = allUsers.filter(
-            (u) => !excludedIds.includes(u.uid) && u.uid !== user.uid
-          );
-          setUsers(filteredUsers);
-          setLoading(false);
-        });
+        const allUsers = usersSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        // ✅ 5. Filter the list just like before
+        const filteredUsers = allUsers.filter(
+          (u) => !excludedIds.includes(u.uid) && u.uid !== user.uid
+        );
+
+        // ✅ 6. Set state ONCE
+        setUsers(filteredUsers);
+
       } catch (error) {
         console.error("Error fetching users:", error);
         Toast.show({
@@ -135,16 +140,14 @@ const SwipePage = () => {
           text2: error.message,
         });
       } finally {
+        // ✅ 7. Set loading to false after everything is done
         setLoading(false);
       }
     };
 
     fetchUsers();
-    // ✅ 6. Cleanup
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+
+  }, [user.uid]); 
 
   const replayAudio = () => {
     if (!player || !status.isLoaded) return; // check player exists and is loaded
@@ -156,7 +159,6 @@ const SwipePage = () => {
     player.pause();
   };
   useEffect(() => {
-    console.log("audioSource" + audioSource);
     if (audioSource) {
       player.play();
     }
@@ -164,7 +166,8 @@ const SwipePage = () => {
   }, [audioSource]);
 
   useEffect(() => {
-    if (users?.length > 0) {
+    // This effect also needs to be careful
+    if (users && users.length > 0) { // Check for both users and users.length
       const firstAudio =
         users[0].audioUrls[
           Math.floor(Math.random() * users[0].audioUrls.length)
@@ -183,8 +186,10 @@ const SwipePage = () => {
   return (
     <View style={styles.container}>
       {!users || users.length === 0 ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <Text style={{ fontSize: 20 }} >No more profiles 😢</Text>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
+          <Text style={{ fontSize: 20 }}>No more profiles 😢</Text>
         </View>
       ) : (
         <Swiper
