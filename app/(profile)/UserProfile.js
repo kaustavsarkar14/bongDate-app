@@ -6,7 +6,7 @@ import {
   Image,
   ScrollView,
   Dimensions,
-  ActivityIndicator, // <-- Import ActivityIndicator
+  ActivityIndicator,
   Alert,
 } from "react-native";
 // 1. IMPORT ICONS
@@ -124,7 +124,7 @@ const UserProfile = () => {
     };
   }, [player]);
 
-  // --- 2. UPDATED AUDIO PLAY/PAUSE FUNCTION ---
+  // --- AUDIO PLAY/PAUSE FUNCTION ---
   const playAudio = async (uri) => {
     try {
       if (currentPlayingUrl === uri) {
@@ -205,7 +205,7 @@ const UserProfile = () => {
         <SectionHeader
           title={isMyProfile ? "My Interests" : "Interests"}
           isMyProfile={isMyProfile}
-          onEdit={() => router.push("EditInterests")}
+          onEdit={() => router.push("RegistrationPage5")}
         />
         <View style={styles.interestsContainer}>
           {profileUser.interests?.map((interestSlug) => {
@@ -228,7 +228,19 @@ const UserProfile = () => {
         </View>
 
         {/* --- 3. UPDATED AUDIO PLAYER UI --- */}
+
+        {/* VVVV THIS IS THE NEWLY ADDED SECTION VVVV */}
+        <SectionHeader
+          title={isMyProfile ? "My Voice Notes" : "Voice Notes"}
+          isMyProfile={isMyProfile}
+          onEdit={() => router.push("UploadAudio")}
+        />
+        {/* ^^^^ END OF NEWLY ADDED SECTION ^^^^ */}
+        
         {profileUser.audioUrls?.map((audioUrl, index) => {
+          // Filter out null or empty URLs just in case
+          if (!audioUrl) return null;
+          
           const isThisTrackActive = currentPlayingUrl === audioUrl;
 
           // Derive states from playerStatus
@@ -281,9 +293,13 @@ const UserProfile = () => {
           onEdit={() => router.push("RegistrationPage7")}
         />
         <View style={styles.photoGridContainer}>
-          {profileUser.photoURIs?.map((uri, index) => (
-            <Image key={index} source={{ uri }} style={styles.photoGridItem} />
-          ))}
+          {profileUser.photoURIs?.map((uri, index) => {
+            // Filter out null or empty URLs just in case
+            if (!uri) return null;
+            return (
+              <Image key={index} source={{ uri }} style={styles.photoGridItem} />
+            );
+          })}
         </View>
 
         {/* --- Logout --- */}
@@ -298,7 +314,7 @@ const UserProfile = () => {
   );
 };
 
-// --- 4. UPDATED STYLES ---
+// --- STYLES (Unchanged) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -417,7 +433,7 @@ const styles = StyleSheet.create({
   // Audio
   audioPlayer: {
     marginBottom: 10,
-    marginTop: 10,
+    // marginTop: 10, <-- Removed, as SectionHeader has margin
   },
   audioButton: {
     backgroundColor: "#E91E63",

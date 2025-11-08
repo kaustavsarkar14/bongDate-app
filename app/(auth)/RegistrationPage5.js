@@ -7,54 +7,72 @@ import {
   Platform,
   KeyboardAvoidingView,
   ScrollView,
-  TextInput, // 1. Import TextInput for search
+  TextInput,
+  ActivityIndicator, // 1. Import ActivityIndicator
 } from "react-native";
 import React, { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRegistration } from "../../context/RegistrationDataContext";
-import { ChevronRight, Search } from "lucide-react-native"; // 2. Import Search icon
+import { ChevronRight, Search, Check } from "lucide-react-native"; // 2. Import Check icon
 import { ALL_INTERESTS_DATA } from "../../utilities/constants";
 
-// --- Mock Data for Interests ---
-// In a real app, you'd fetch this from a database
+// --- PRODUCTION: Import Firebase and Auth ---
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../../firebase.config";
+import { useAuth } from "../../context/AuthContext";
+
+// --- Mock Data ---
 const ALL_INTERESTS = ALL_INTERESTS_DATA;
-  // Add more as needed
 
-// ------------------------------
-
-// Next button icon
+// --- Icons ---
 const ArrowIcon = () => (
   <View style={styles.arrowIcon}>
     <ChevronRight color="#fff" size={28} strokeWidth={3} />
   </View>
 );
 
+// 3. Add CheckIcon for "Update" mode
+const CheckIcon = () => (
+  <View style={styles.arrowIcon}>
+    <Check color="#fff" size={28} strokeWidth={3} />
+  </View>
+);
+
 const RegistrationPage5 = () => {
   const { formData, updateFormData } = useRegistration();
-  const [selectedInterests, setSelectedInterests] = useState(
-    formData.interests || []
-  );
-  const [searchQuery, setSearchQuery] = useState("");
+  const { user, setUser } = useAuth(); // 4. Get Auth context
   const router = useRouter();
 
-  // Filter interests based on search query
+  // 5. Determine mode
+  const isUpdateMode = user && user.interests; // Check if user has interests array
+
+  // 6. Add loading state
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // 7. Initialize state from user (update) or form (registration)
+  const [selectedInterests, setSelectedInterests] = useState(() => {
+    const source = isUpdateMode ? user.interests : formData.interests;
+    return source || [];
+  });
+
+  // Filter interests (unchanged)
   const filteredInterests = useMemo(() => {
     if (!searchQuery) {
-      return ALL_INTERESTS; // Show all if search is empty
+      return ALL_INTERESTS;
     }
     return ALL_INTERESTS.filter((interest) =>
       interest.label.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [searchQuery]);
 
+  // Handle selection (unchanged)
   const handleSelectInterest = (slug) => {
     let newInterests;
     if (selectedInterests.includes(slug)) {
-      // Deselect
       newInterests = selectedInterests.filter((item) => item !== slug);
     } else {
-      // Select, but check limit
       if (selectedInterests.length >= 5) {
         Alert.alert("Limit Reached", "You can choose a maximum of 5 interests.");
         return;
@@ -64,41 +82,71 @@ const RegistrationPage5 = () => {
     setSelectedInterests(newInterests);
   };
 
-  const handleNext = () => {
-    // Unlike before, we allow 0 interests (user can skip)
-    // But you could enforce a minimum here if desired
+  // 8. Create the main submit function
+  const submitData = async () => {
+    if (isUpdateMode) {
+      // --- Update Profile Logic ---
+      if (!user) return;
+      setIsLoading(true);
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        await updateDoc(userDocRef, {
+          interests: selectedInterests,
+        });
+
+        if (setUser) {
+          setUser({ ...user, interests: selectedInterests });
+        }
+        
+        Alert.alert("Interests Updated", "Your interests have been saved.");
+        router.back(); // Go back to profile page
+      } catch (error) {
+        console.error("Update failed:", error);
+        Alert.alert("Error", "Could not update your interests.");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // --- Registration Logic (Original) ---
+      updateFormData({ interests: selectedInterests });
+      console.log("Step 5 Data Updated:", { ...formData, interests: selectedInterests });
+      router.push("RegistrationPage6");
+    }
+  };
+
+  // 9. handleSubmit now just manages the alert
+  const handleSubmit = () => {
     if (selectedInterests.length < 1) {
-       Alert.alert(
+      Alert.alert(
         "Are you sure?",
         "Adding interests helps you match. Are you sure you want to continue?",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Yes, continue", onPress: proceedToNext },
+          { text: "Yes, continue", onPress: submitData }, // Calls the new submit function
         ]
       );
     } else {
-      proceedToNext();
+      submitData(); // Call submit function directly
     }
   };
-  
-  const proceedToNext = () => {
-    updateFormData({ interests: selectedInterests });
-    console.log("Step 5 Data Updated:", { ...formData, interests: selectedInterests });
-    // Navigate to the next step
-    router.push("RegistrationPage6"); // Next: ID verification
-  }
 
-  const handleSkip = () => {
-    // Save an empty array and proceed
-    updateFormData({ interests: [] });
-    router.push("RegistrationPage6"); // Next: ID verification
+  // 10. Update skip button to be "Cancel" in update mode
+  const handleSkipOrCancel = () => {
+    if (isUpdateMode) {
+      router.back(); // Just go back
+    } else {
+      // Original skip logic
+      updateFormData({ interests: [] });
+      router.push("RegistrationPage6");
+    }
   };
 
-  // Helper component for the interest "pills"
+  // Helper component (unchanged)
   const InterestPill = ({ item, selected, onSelect }) => (
     <TouchableOpacity
       style={[styles.pill, selected && styles.pillSelected]}
       onPress={onSelect}
+      disabled={isLoading} // Disable pill presses while loading
     >
       <Text style={styles.pillEmoji}>{item.emoji}</Text>
       <Text style={[styles.pillText, selected && styles.pillTextSelected]}>
@@ -117,9 +165,14 @@ const RegistrationPage5 = () => {
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>Choose 5 things you're really into</Text>
+          {/* 11. Update Title based on mode */}
+          <Text style={styles.title}>
+            {isUpdateMode
+              ? "Update your interests"
+              : "Choose 5 things you're really into"}
+          </Text>
           <Text style={styles.subtitle}>
-            Proud foodie or big on bouldering? Add interests to your profile.
+            You can select up to 5 interests for your profile.
           </Text>
 
           {/* Search Bar */}
@@ -130,6 +183,7 @@ const RegistrationPage5 = () => {
               placeholder="What are you into?"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              editable={!isLoading} // Disable search while loading
             />
           </View>
 
@@ -148,20 +202,31 @@ const RegistrationPage5 = () => {
           </View>
         </ScrollView>
 
-        {/* Footer */}
+        {/* 12. Update Footer UI */}
         <View style={styles.footer}>
-          <TouchableOpacity onPress={handleSkip}>
-            <Text style={styles.skipButton}>Skip</Text>
+          <TouchableOpacity onPress={handleSkipOrCancel} disabled={isLoading}>
+            <Text style={styles.skipButton}>
+              {isUpdateMode ? "Cancel" : "Skip"}
+            </Text>
           </TouchableOpacity>
           <Text style={styles.counterText}>
             {selectedInterests.length}/5 selected
           </Text>
-          <TouchableOpacity 
-            style={[styles.nextButton, selectedInterests.length > 5 && styles.nextButtonDisabled]} 
-            onPress={handleNext}
-            disabled={selectedInterests.length > 5}
+          <TouchableOpacity
+            style={[
+              styles.nextButton,
+              (selectedInterests.length > 5 || isLoading) && styles.nextButtonDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={selectedInterests.length > 5 || isLoading}
           >
-            <ArrowIcon />
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : isUpdateMode ? (
+              <CheckIcon />
+            ) : (
+              <ArrowIcon />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -169,6 +234,7 @@ const RegistrationPage5 = () => {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
+          disabled={isLoading}
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
@@ -177,6 +243,7 @@ const RegistrationPage5 = () => {
   );
 };
 
+// Styles (unchanged)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -186,9 +253,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    // Use padding instead of justify-center to allow scrolling from top
     padding: 20,
-    paddingBottom: 100, // Space for the footer
+    paddingBottom: 100,
   },
   title: {
     fontSize: 26,
@@ -203,7 +269,6 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     paddingHorizontal: 20,
   },
-  // Search Bar
   searchBar: {
     width: "100%",
     height: 50,
@@ -220,7 +285,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
   },
-  // Suggestion Title
   suggestionTitle: {
     fontSize: 18,
     fontWeight: "600",
@@ -228,7 +292,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignSelf: "flex-start",
   },
-  // Pills
   pillContainer: {
     width: "100%",
     flexDirection: "row",
@@ -264,13 +327,12 @@ const styles = StyleSheet.create({
     color: "#E91E63",
     fontWeight: "bold",
   },
-  // Footer
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: 90, // Taller footer
+    height: 90,
     backgroundColor: "#ffffff",
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
@@ -278,7 +340,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingBottom: 20, // Padding for safe area
+    paddingBottom: 20,
   },
   skipButton: {
     fontSize: 18,
@@ -290,7 +352,6 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "600",
   },
-  // Floating Buttons
   nextButton: {
     width: 60,
     height: 60,
@@ -317,7 +378,7 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 1, // Ensure it's above content
+    zIndex: 1,
   },
   backButtonText: {
     fontSize: 30,
