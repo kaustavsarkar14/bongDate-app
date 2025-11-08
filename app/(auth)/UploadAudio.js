@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Platform, // Import Platform
+  Platform,
 } from "react-native";
 import {
   useAudioRecorder,
@@ -20,7 +20,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { uploadAudioToFirebase } from "../../utilities/firebaseFunctions";
 import { useRegistration } from "../../context/RegistrationDataContext";
 import { useRouter } from "expo-router";
-import { Mic, Play, RotateCcw, ArrowRight, ChevronLeft } from "lucide-react-native";
+import {
+  Mic,
+  Play,
+  RotateCcw,
+  ArrowRight,
+  ChevronLeft,
+} from "lucide-react-native";
 
 // --- PRODUCTION: Import Firebase and Auth ---
 import { doc, updateDoc } from "firebase/firestore";
@@ -29,6 +35,7 @@ import {
   uploadBytesResumable,
   getDownloadURL,
   deleteObject,
+  refFromURL, // 👈 *** FIX 2: IMPORT refFromURL ***
 } from "firebase/storage";
 import { db, storage } from "../../firebase.config";
 import { useAuth } from "../../context/AuthContext";
@@ -44,24 +51,19 @@ const MAX_RECORDING_DURATION = 60 * 1000; // 60 seconds
 const UploadAudio = () => {
   const router = useRouter();
   const { formData, updateFormData } = useRegistration();
-  const { user, setUser } = useAuth(); // Get user and setUser
-
-  // --- 1. Determine Mode ---
+  const { user, setUser } = useAuth();
   const isUpdateMode = user && user.audioUrls;
-
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-
-  // --- 2. Initialize State from Context ---
-  // Store the *original* URLs to detect replacements
   const [originalAudioUrls] = useState(
     user?.audioUrls || formData?.audioUrls || Array(questions.length).fill(null)
   );
-
-  // Initialize UI state from user data (update) or form data (registration)
   const [audioUris, setAudioUris] = useState(() => {
-    const source = user?.audioUrls || formData?.audioUrls || Array(questions.length).fill(null);
-    return [...source]; // Create a copy
+    const source =
+      user?.audioUrls ||
+      formData?.audioUrls ||
+      Array(questions.length).fill(null);
+    return [...source];
   });
 
   // --- Audio Player/Recorder State ---
@@ -82,7 +84,7 @@ const UploadAudio = () => {
     });
   }, []);
 
-  // --- Animation Controls (unchanged) ---
+  // --- Animation Controls ---
   const startPulse = () => {
     if (pulseLoopRef.current) return;
     const loop = Animated.loop(
@@ -107,7 +109,9 @@ const UploadAudio = () => {
     if (pulseLoopRef.current) {
       try {
         pulseLoopRef.current.stop();
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
       pulseLoopRef.current = null;
     }
     pulseAnim.stopAnimation(() => {
@@ -115,7 +119,7 @@ const UploadAudio = () => {
     });
   };
 
-  // --- Audio Recording Controls (unchanged) ---
+  // --- Audio Recording Controls ---
   const startRecording = async () => {
     try {
       if (playerStatus?.isPlaying) {
@@ -149,7 +153,7 @@ const UploadAudio = () => {
     }
   };
 
-  // --- Audio Playback Controls (unchanged) ---
+  // --- Audio Playback Controls ---
   const playAudio = async (uri) => {
     if (!uri || recorderState.isRecording) return;
     setAudioSource(uri);
@@ -180,13 +184,12 @@ const UploadAudio = () => {
     stopPulse();
   };
 
-  // --- 3. Split Submission Logic ---
+  // --- Submission Logic ---
 
   // A. Original logic for NEW REGISTRATION
   const handleRegistrationSubmit = async () => {
     try {
       const uploadedUrls = await Promise.all(
-        // Use the generic uploader for registration
         audioUris.map((uri) => uploadAudioToFirebase(uri))
       );
       updateFormData({
@@ -200,9 +203,8 @@ const UploadAudio = () => {
         "Upload Failed",
         "There was an error uploading your audio. Please try again."
       );
-      setIsUploading(false); // Re-enable button on failure
+      setIsUploading(false);
     }
-    // Note: setIsUploading(false) is handled in the main handler's finally block
   };
 
   // B. New, complete logic for UPDATING A PROFILE
@@ -216,15 +218,26 @@ const UploadAudio = () => {
       // --- 1. Upload new files ---
       const uploadPromises = audioUris.map(async (uri, index) => {
         if (uri && uri.startsWith("file:")) {
-          // This is a new local file. Upload it.
           console.log(`Uploading new audio for slot ${index}...`);
           const response = await fetch(uri);
           const blob = await response.blob();
-          
-          // Store in a user-specific, deterministic path
-          const fileRef = ref(storage, `users/${user.uid}/audio_${index}.m4a`);
+
+          // --- FIX 1: DYNAMIC FILE EXTENSION & CONTENT-TYPE ---
+          // Get the actual file extension from the URI
+          const fileExtension = uri.split(".").pop() || "m4a"; // Fallback to m4a
+          console.log(`Uploading file with extension: .${fileExtension}`);
+
+          // Use the dynamic extension in the file path
+          const fileRef = ref(
+            storage,
+            `users/${user.uid}/audio_${index}.${fileExtension}`
+          );
+
+          // The MIME type for both .m4a and .mp4 (common with expo-audio) is 'audio/mp4'
+          const contentType = fileExtension === "mp4" ? "audio/mp4" : "audio/m4a";
+
           const uploadTask = uploadBytesResumable(fileRef, blob, {
-            contentType: "audio/m4a", // Specify content type
+            contentType: contentType, // Use the determined content type
           });
 
           return new Promise((resolve, reject) => {
@@ -233,37 +246,37 @@ const UploadAudio = () => {
               null, // no progress observer
               (error) => reject(error),
               async () => {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                const downloadURL = await getDownloadURL(
+                  uploadTask.snapshot.ref
+                );
                 resolve(downloadURL);
               }
             );
           });
         } else {
-          // This is 'http://' URL or 'null'. Keep it.
           return uri;
         }
       });
 
-      // This is the final array of URLs
       const allFinalURLs = await Promise.all(uploadPromises);
 
       // --- 2. Delete *replaced* files ---
-      // If an original URL exists AND it was replaced (new file:// URI),
-      // delete the old file from storage.
       const deletePromises = [];
       originalAudioUrls.forEach((originalUrl, index) => {
         const newUri = audioUris[index];
 
-        // If there WAS a URL, and the new URI is a local file...
         if (originalUrl && newUri && newUri.startsWith("file:")) {
-          // ...this is a REPLACEMENT. Delete the old file.
           console.log(`Deleting old audio from slot ${index}:`, originalUrl);
           try {
-            const deleteRef = ref(storage, originalUrl); // Get ref from URL
+            // --- FIX 2: CORRECTLY GET REFERENCE FROM URL FOR DELETION ---
+            const deleteRef = refFromURL(storage, originalUrl); // Use refFromURL
             deletePromises.push(deleteObject(deleteRef));
           } catch (error) {
-            // Log and ignore errors (e.g., file not found, bad URL)
-            console.warn("Could not create delete ref for:", originalUrl, error);
+            console.warn(
+              "Could not create delete ref for:",
+              originalUrl,
+              error
+            );
           }
         }
       });
@@ -281,40 +294,43 @@ const UploadAudio = () => {
       if (setUser) {
         setUser({
           ...user,
-          audioUrls: allFinalURLs, // Overwrite with new audio
+          audioUrls: allFinalURLs,
         });
       }
 
       Alert.alert("Profile Updated", "Your audio clips have been saved.");
-      router.push("ProfilePage"); // Navigate to profile
+      router.push("ProfilePage");
     } catch (error) {
       console.error("Profile update failed:", error);
       Alert.alert(
         "Update Failed",
         "There was an error updating your audio. Please try again."
       );
-      setIsUploading(false); // Re-enable button on failure
+      setIsUploading(false);
     }
   };
 
-  // --- 4. Main Submit Handler ---
+  // --- Main Submit Handler ---
   const handleNextOrSubmit = async () => {
     const currentUri = audioUris[currentQuestionIndex];
     if (!currentUri) {
-      Alert.alert("Record your answer", "Please record audio before proceeding.");
+      Alert.alert(
+        "Record your answer",
+        "Please record audio before proceeding."
+      );
       return;
     }
 
-    // Stop playback/pulse before navigating
     stopPulse();
     if (player?.stop) {
       try {
         await player.stop();
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
     setAudioSource(null);
 
-    // Check if this is the last question
     if (currentQuestionIndex === questions.length - 1) {
       setIsUploading(true);
       if (isUpdateMode) {
@@ -322,11 +338,10 @@ const UploadAudio = () => {
       } else {
         await handleRegistrationSubmit();
       }
-      setIsUploading(false); // This will be set in finally, but good to have
+      setIsUploading(false);
       return;
     }
 
-    // Not the last question, move to the next one
     setCurrentQuestionIndex((idx) => idx + 1);
   };
 
@@ -334,13 +349,10 @@ const UploadAudio = () => {
   const isRecording = recorderState.isRecording;
   const isPlaying = !!playerStatus?.isPlaying;
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
-
-  // Disable all interactions if uploading, recording, or playing
   const isBusy = isUploading || isRecording || isPlaying;
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* --- 5. Added Back Button --- */}
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => router.back()}
@@ -382,7 +394,6 @@ const UploadAudio = () => {
         {/* --- Preview State --- */}
         {currentUri && !isRecording && (
           <View style={styles.previewContainer}>
-            {/* Circular play button */}
             <TouchableOpacity
               onPress={() => playAudio(currentUri)}
               disabled={isRecording || isUploading}
@@ -400,7 +411,6 @@ const UploadAudio = () => {
               </Animated.View>
             </TouchableOpacity>
 
-            {/* Controls below */}
             <View style={styles.previewActions}>
               <TouchableOpacity
                 style={[styles.rectButton, { backgroundColor: "#e53935" }]}
@@ -410,7 +420,6 @@ const UploadAudio = () => {
                 <RotateCcw color="#fff" size={22} />
                 <Text style={styles.optionText}>Re-record</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.rectButton, { backgroundColor: "#1E88E5" }]}
                 onPress={handleNextOrSubmit}
@@ -421,7 +430,6 @@ const UploadAudio = () => {
                 ) : (
                   <>
                     <ArrowRight color="#fff" size={22} />
-                    {/* --- 5. Updated Button Text --- */}
                     <Text style={styles.optionText}>
                       {isLastQuestion
                         ? isUpdateMode
@@ -452,7 +460,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 50 : 30, // Adjust for SafeArea
+    top: Platform.OS === "ios" ? 50 : 30,
     left: 20,
     width: 40,
     height: 40,
@@ -466,7 +474,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 60,
     fontWeight: "600",
-    paddingHorizontal: 20, // Ensure text wraps nicely
+    paddingHorizontal: 20,
   },
   centerContent: {
     alignItems: "center",

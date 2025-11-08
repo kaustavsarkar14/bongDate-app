@@ -147,7 +147,7 @@ const SwipePage = () => {
 
     fetchUsers();
 
-  }, [user.uid]); 
+  }, []); 
 
   const replayAudio = () => {
     if (!player || !status.isLoaded) return; // check player exists and is loaded
