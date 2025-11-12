@@ -25,10 +25,7 @@ const ChatWindowHeader = ({
   const { user } = useAuth();
 
   const handleProfilePress = () => {
-    if (
-      profileUnlockRequestByUser === "true" &&
-      profileUnlockRequestByOtherUser === "true"
-    ) {
+    if (profileUnlockRequestByUser && profileUnlockRequestByOtherUser) {
       router.push({
         pathname: "UserProfile",
         params: {

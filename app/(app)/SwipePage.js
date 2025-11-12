@@ -91,6 +91,12 @@ const SwipePage = () => {
         ],
       });
       // sent to chat page
+      router.push({
+        pathname: "ChatWindow", // Make sure this path is correct
+        params: {
+          otherUserId: swipedUser.id,
+        },
+      });
     }
   };
 

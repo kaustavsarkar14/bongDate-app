@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  // Import FlatList
   FlatList,
 } from "react-native";
 import ChatWindowHeader from "../../components/ChatWindowHeader";
@@ -30,35 +29,58 @@ import { db } from "../../firebase.config";
 import { useLocalSearchParams } from "expo-router";
 
 const ChatWindow = () => {
-  const {
-    otherUserId,
-    profileUnlockRequestByUser,
-    profileUnlockRequestByOtherUser,
-  } = useLocalSearchParams();
+  // --- 1. SIMPLIFIED PARAMS ---
+  const { otherUserId } = useLocalSearchParams();
+  // --- END MODIFICATION ---
+
   const [otherUsername, setOtherUsername] = useState("Loading...");
   const { user, getUser } = useAuth();
   const [messages, setMessages] = useState([]);
 
+  // --- 2. NEW STATE for profile requests ---
+  const [profileRequestByUser, setProfileRequestByUser] = useState(null);
+  const [profileRequestByOtherUser, setProfileRequestByOtherUser] =
+    useState(null);
+  // --- END MODIFICATION ---
 
   const inputTextRef = useRef("");
   const inputComponentRef = useRef(null);
-  const flatListRef = useRef(); // Renamed from scrollViewRef for clarity
+  const flatListRef = useRef();
 
   const setUserDetails = async () => {
     const otherUserData = await getUser(otherUserId);
     setOtherUsername(otherUserData.name);
   };
 
+  // --- 3. MODIFIED useEffect ---
   useEffect(() => {
-    const docRef = doc(
-      db,
-      "chats",
-      getChatIdFromUserIds(user.uid, otherUserId)
-    );
+    const chatId = getChatIdFromUserIds(user.uid, otherUserId);
+    const docRef = doc(db, "chats", chatId);
 
+    // --- Listener for the MAIN CHAT DOC (to get profile status) ---
+    const unsubChatDoc = onSnapshot(docRef, (doc) => {
+      if (doc.exists()) {
+        const chatData = doc.data();
+        if (chatData.users) {
+          // Find and set status for the current user
+          const userStatus = chatData.users.find(
+            (usr) => usr.uid == user.uid
+          )?.profileUnlockRequest;
+          setProfileRequestByUser(userStatus);
+
+          // Find and set status for the other user
+          const otherUserStatus = chatData.users.find(
+            (usr) => usr.uid == otherUserId
+          )?.profileUnlockRequest;
+          setProfileRequestByOtherUser(otherUserStatus);
+        }
+      }
+    });
+
+    // --- Listener for MESSAGES (unchanged) ---
     const messageRef = collection(docRef, "messages");
     const q = query(messageRef, orderBy("timestamp", "asc"));
-    const unsub = onSnapshot(q, (snapshot) => {
+    const unsubMessages = onSnapshot(q, (snapshot) => {
       let allMessages = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -67,18 +89,20 @@ const ChatWindow = () => {
     });
 
     setUserDetails();
-    return unsub;
-  }, []);
+
+    // Return cleanup function for BOTH listeners
+    return () => {
+      unsubChatDoc();
+      unsubMessages();
+    };
+  }, [user.uid, otherUserId]); // Add dependencies
+  // --- END MODIFICATION ---
 
   const handleSend = async () => {
     const messageText = inputTextRef.current.trim();
-
     if (!messageText) return;
-
-    // Clear the ref and the input component
     inputTextRef.current = "";
     inputComponentRef.current?.clear();
-    // --- Changes End ---
 
     try {
       const docRef = doc(
@@ -86,14 +110,12 @@ const ChatWindow = () => {
         "chats",
         getChatIdFromUserIds(user.uid, otherUserId)
       );
-
       const messageRef = collection(docRef, "messages");
-      const newDoc = await addDoc(messageRef, {
+      await addDoc(messageRef, {
         userId: user.uid,
         message: messageText,
         timestamp: serverTimestamp(),
       });
-
       await setDoc(
         docRef,
         {
@@ -107,16 +129,12 @@ const ChatWindow = () => {
       );
     } catch (error) {
       console.log(error);
-      Toast.show({
-        type: "error",
-        text1: "Error sending message",
-      });
+      Toast.show({ type: "error", text1: "Error sending message" });
     }
   };
 
   const renderMessage = ({ item: msg }) => (
     <View
-      key={msg.id} // key is still good practice, though FlatList handles it
       style={[
         styles.messageBubble,
         msg.userId === user.uid ? styles.myMessage : styles.otherMessage,
@@ -132,12 +150,14 @@ const ChatWindow = () => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 80}
     >
+      {/* --- 4. UPDATED PROPS --- */}
       <ChatWindowHeader
         otherUsername={otherUsername}
         otherUserId={otherUserId}
-        profileUnlockRequestByUser={profileUnlockRequestByUser}
-        profileUnlockRequestByOtherUser={profileUnlockRequestByOtherUser}
+        profileUnlockRequestByUser={profileRequestByUser}
+        profileUnlockRequestByOtherUser={profileRequestByOtherUser}
       />
+      {/* --- END MODIFICATION --- */}
 
       <FlatList
         ref={flatListRef}
@@ -152,17 +172,11 @@ const ChatWindow = () => {
         onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
 
-      {/* Input Section */}
       <View style={styles.inputContainer}>
         <TextInput
-          // --- Changes Start ---
           ref={inputComponentRef}
-          // Removed `value` prop
-          // Set `defaultValue` so it's initially empty
           defaultValue=""
-          // Update the ref's current value on change
           onChangeText={(text) => (inputTextRef.current = text)}
-          // --- Changes End ---
           style={styles.input}
           placeholder="Type a message..."
           multiline
@@ -177,7 +191,6 @@ const ChatWindow = () => {
 
 export default ChatWindow;
 
-// Styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,

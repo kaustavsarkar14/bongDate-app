@@ -36,7 +36,7 @@ const ChatPage = () => {
         id: doc.id,
         ...doc.data(),
       }));
-      console.log(chatList);
+      // console.log(chatList); // Keep for debugging if needed
 
       setChats(chatList.filter((chat) => chat.id.includes(user.uid)));
       setLoading(false);
@@ -46,29 +46,24 @@ const ChatPage = () => {
     return () => unsubscribe();
   }, []);
 
+  // --- MODIFIED FUNCTION ---
   const openChatWindow = async (item) => {
     if (!user) return;
-    console.log(
-      user.uid == item.users[0].uid ? item.users[1].uid : item.users[0].uid
-    );
+
+    // 1. Calculate the other user's ID
+    const otherUserId =
+      user.uid == item.users[0].uid ? item.users[1].uid : item.users[0].uid;
+
+    // 2. Push *only* the otherUserId. ChatWindow will handle the rest.
     router.push({
       pathname: "ChatWindow",
       params: {
-        otherUserId:
-          user.uid == item.users[0].uid ? item.users[1].uid : item.users[0].uid,
-        profileUnlockRequestByUser: item.users.find(
-          (usr) => usr.uid == user.uid
-        ).profileUnlockRequest,
-        profileUnlockRequestByOtherUser: item.users.find(
-          (usr) =>
-            usr.uid ==
-            (user.uid == item.users[0].uid
-              ? item.users[1].uid
-              : item.users[0].uid)
-        ).profileUnlockRequest,
+        otherUserId: otherUserId,
       },
     });
   };
+  // --- END MODIFICATION ---
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
