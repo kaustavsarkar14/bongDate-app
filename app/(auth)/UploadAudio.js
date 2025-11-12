@@ -35,7 +35,7 @@ import {
   uploadBytesResumable,
   getDownloadURL,
   deleteObject,
-  refFromURL, // 👈 *** FIX 2: IMPORT refFromURL ***
+  refFromURL,
 } from "firebase/storage";
 import { db, storage } from "../../firebase.config";
 import { useAuth } from "../../context/AuthContext";
@@ -47,6 +47,7 @@ const questions = [
 ];
 
 const MAX_RECORDING_DURATION = 60 * 1000; // 60 seconds
+const MIN_RECORDING_DURATION = 5 * 1000; // 5 seconds
 
 const UploadAudio = () => {
   const router = useRouter();
@@ -76,6 +77,8 @@ const UploadAudio = () => {
   // --- Animation State ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoopRef = useRef(null);
+  const recordingStartTimeRef = useRef(null);
+  const isTryingToRecord = useRef(false);
 
   useEffect(() => {
     setAudioModeAsync({
@@ -122,12 +125,19 @@ const UploadAudio = () => {
   // --- Audio Recording Controls ---
   const startRecording = async () => {
     try {
-      if (playerStatus?.isPlaying) {
+      if (playerStatus?.playing) {
         Alert.alert("Wait", "Stop playback before recording.");
         return;
       }
+      isTryingToRecord.current = true;
       await recorder.prepareToRecordAsync();
+
+      if (!isTryingToRecord.current) {
+        return;
+      }
+
       recorder.record();
+      recordingStartTimeRef.current = Date.now();
       startPulse();
       setTimeout(() => {
         if (recorderState.isRecording) stopRecording();
@@ -135,23 +145,67 @@ const UploadAudio = () => {
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Could not start recording");
+      isTryingToRecord.current = false;
     }
   };
 
+  // --- NEW stopRecording FUNCTION ---
   const stopRecording = async () => {
-    try {
-      await recorder.stop();
+    isTryingToRecord.current = false; // Set intent flag to false
+
+    // Case 1: User tapped *during* prepare. Recording never started.
+    if (!recordingStartTimeRef.current) {
       stopPulse();
-      const uri = recorder.uri;
-      const updatedUris = [...audioUris];
-      updatedUris[currentQuestionIndex] = uri;
-      setAudioUris(updatedUris);
-      setAudioSource(uri);
-    } catch (err) {
-      console.error(err);
-      Alert.alert("Error", "Could not stop recording");
+      return;
     }
+
+    // Case 2: Recording *did* start. Get duration.
+    const stopTime = Date.now();
+    const duration = stopTime - recordingStartTimeRef.current;
+    
+    try {
+      await recorder.stop(); // This will fail on a "tap"
+      stopPulse();
+      recordingStartTimeRef.current = null; // Reset ref *after* successful stop
+
+    } catch (err) {
+      // --- THIS IS THE FIX ---
+      // We *expect* this block to run on a quick tap.
+      // The recorder.stop() failed, which is our "too short" signal.
+      console.warn("Recorder stop failed, likely due to tap:", err);
+      stopPulse();
+      recordingStartTimeRef.current = null; // Reset ref
+      
+      // Show the alert, because we know this was a tap.
+      Alert.alert(
+        "Recording Too Short",
+        `Please hold the button for at least ${
+          MIN_RECORDING_DURATION / 1000
+        } seconds.`
+      );
+      return; // Exit
+    }
+
+    // --- If stop() SUCCEEDED ---
+    // Now we check if the *successful* recording was long enough.
+    if (duration < MIN_RECORDING_DURATION) {
+      Alert.alert(
+        "Recording Too Short",
+        `Please hold the button for at least ${
+          MIN_RECORDING_DURATION / 1000
+        } seconds.`
+      );
+      return; // Exit without saving
+    }
+
+    // If we're here, stop() succeeded AND duration is good.
+    const uri = recorder.uri;
+    const updatedUris = [...audioUris];
+    updatedUris[currentQuestionIndex] = uri;
+    setAudioUris(updatedUris);
+    setAudioSource(uri);
   };
+  // --- END of new stopRecording ---
 
   // --- Audio Playback Controls ---
   const playAudio = async (uri) => {
@@ -168,10 +222,10 @@ const UploadAudio = () => {
   };
 
   useEffect(() => {
-    if (playerStatus?.isPlaying === false) {
+    if (playerStatus?.playing === false) {
       stopPulse();
     }
-    if (playerStatus?.isPlaying === true) {
+    if (playerStatus?.playing === true) {
       startPulse();
     }
   }, [playerStatus]);
@@ -184,10 +238,9 @@ const UploadAudio = () => {
     stopPulse();
   };
 
-  // --- Submission Logic ---
-
-  // A. Original logic for NEW REGISTRATION
+  // --- Submission Logic (Unchanged) ---
   const handleRegistrationSubmit = async () => {
+    // ... (no changes)
     try {
       const uploadedUrls = await Promise.all(
         audioUris.map((uri) => uploadAudioToFirebase(uri))
@@ -207,8 +260,8 @@ const UploadAudio = () => {
     }
   };
 
-  // B. New, complete logic for UPDATING A PROFILE
   const handleUpdateProfile = async () => {
+    // ... (no changes)
     if (!user || !user.uid) {
       Alert.alert("Error", "You must be logged in to update your profile.");
       return;
@@ -221,29 +274,21 @@ const UploadAudio = () => {
           console.log(`Uploading new audio for slot ${index}...`);
           const response = await fetch(uri);
           const blob = await response.blob();
-
-          // --- FIX 1: DYNAMIC FILE EXTENSION & CONTENT-TYPE ---
-          // Get the actual file extension from the URI
-          const fileExtension = uri.split(".").pop() || "m4a"; // Fallback to m4a
+          const fileExtension = uri.split(".").pop() || "m4a";
           console.log(`Uploading file with extension: .${fileExtension}`);
-
-          // Use the dynamic extension in the file path
           const fileRef = ref(
             storage,
             `users/${user.uid}/audio_${index}.${fileExtension}`
           );
-
-          // The MIME type for both .m4a and .mp4 (common with expo-audio) is 'audio/mp4'
-          const contentType = fileExtension === "mp4" ? "audio/mp4" : "audio/m4a";
-
+          const contentType =
+            fileExtension === "mp4" ? "audio/mp4" : "audio/m4a";
           const uploadTask = uploadBytesResumable(fileRef, blob, {
-            contentType: contentType, // Use the determined content type
+            contentType: contentType,
           });
-
           return new Promise((resolve, reject) => {
             uploadTask.on(
               "state_changed",
-              null, // no progress observer
+              null,
               (error) => reject(error),
               async () => {
                 const downloadURL = await getDownloadURL(
@@ -257,19 +302,16 @@ const UploadAudio = () => {
           return uri;
         }
       });
-
       const allFinalURLs = await Promise.all(uploadPromises);
 
       // --- 2. Delete *replaced* files ---
       const deletePromises = [];
       originalAudioUrls.forEach((originalUrl, index) => {
         const newUri = audioUris[index];
-
         if (originalUrl && newUri && newUri.startsWith("file:")) {
           console.log(`Deleting old audio from slot ${index}:`, originalUrl);
           try {
-            // --- FIX 2: CORRECTLY GET REFERENCE FROM URL FOR DELETION ---
-            const deleteRef = refFromURL(storage, originalUrl); // Use refFromURL
+            const deleteRef = refFromURL(storage, originalUrl);
             deletePromises.push(deleteObject(deleteRef));
           } catch (error) {
             console.warn(
@@ -280,7 +322,6 @@ const UploadAudio = () => {
           }
         }
       });
-
       await Promise.all(deletePromises);
 
       // --- 3. Update Firestore Document ---
@@ -297,7 +338,6 @@ const UploadAudio = () => {
           audioUrls: allFinalURLs,
         });
       }
-
       Alert.alert("Profile Updated", "Your audio clips have been saved.");
       router.push("ProfilePage");
     } catch (error) {
@@ -310,8 +350,8 @@ const UploadAudio = () => {
     }
   };
 
-  // --- Main Submit Handler ---
   const handleNextOrSubmit = async () => {
+    // ... (no changes)
     const currentUri = audioUris[currentQuestionIndex];
     if (!currentUri) {
       Alert.alert(
@@ -320,7 +360,6 @@ const UploadAudio = () => {
       );
       return;
     }
-
     stopPulse();
     if (player?.stop) {
       try {
@@ -330,7 +369,6 @@ const UploadAudio = () => {
       }
     }
     setAudioSource(null);
-
     if (currentQuestionIndex === questions.length - 1) {
       setIsUploading(true);
       if (isUpdateMode) {
@@ -341,15 +379,15 @@ const UploadAudio = () => {
       setIsUploading(false);
       return;
     }
-
     setCurrentQuestionIndex((idx) => idx + 1);
   };
 
+  // --- Render (Unchanged) ---
   const currentUri = audioUris[currentQuestionIndex];
   const isRecording = recorderState.isRecording;
-  const isPlaying = !!playerStatus?.isPlaying;
+  const playing = !!playerStatus?.playing;
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
-  const isBusy = isUploading || isRecording || isPlaying;
+  const isBusy = isUploading || isRecording || playing;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -360,18 +398,15 @@ const UploadAudio = () => {
       >
         <ChevronLeft color="#fff" size={30} strokeWidth={3} />
       </TouchableOpacity>
-
       <Text style={styles.questionText}>{questions[currentQuestionIndex]}</Text>
-
       <View style={styles.centerContent}>
-        {/* --- Record State --- */}
         {!currentUri && (
           <TouchableOpacity
             activeOpacity={0.8}
             onPressIn={startRecording}
             onPressOut={stopRecording}
             style={styles.holdButtonWrapper}
-            disabled={isPlaying || isUploading || isRecording}
+            disabled={playing || isUploading || isRecording}
           >
             <Text style={styles.holdText}>
               {isRecording ? "Recording..." : "Hold to Record"}
@@ -390,8 +425,6 @@ const UploadAudio = () => {
             </Animated.View>
           </TouchableOpacity>
         )}
-
-        {/* --- Preview State --- */}
         {currentUri && !isRecording && (
           <View style={styles.previewContainer}>
             <TouchableOpacity
@@ -403,14 +436,13 @@ const UploadAudio = () => {
                   styles.circleButton,
                   {
                     transform: [{ scale: pulseAnim }],
-                    backgroundColor: isPlaying ? "#2E7D32" : "#43A047",
+                    backgroundColor: playing ? "#2E7D32" : "#43A047",
                   },
                 ]}
               >
                 <Play color="#fff" size={38} />
               </Animated.View>
             </TouchableOpacity>
-
             <View style={styles.previewActions}>
               <TouchableOpacity
                 style={[styles.rectButton, { backgroundColor: "#e53935" }]}
@@ -450,6 +482,7 @@ const UploadAudio = () => {
 
 export default UploadAudio;
 
+// --- Styles (Unchanged) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,

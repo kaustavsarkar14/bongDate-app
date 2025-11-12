@@ -3,7 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
-  onSnapshot, 
+  onSnapshot,
   query,
   setDoc,
   where,
@@ -28,12 +28,13 @@ import {
   useAudioSampleListener,
 } from "expo-audio";
 import SwipeCardDetail from "../../components/SwipeCardDetail";
+import { useRouter } from "expo-router";
 
 const SwipePage = () => {
   const [users, setUsers] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
-
+  const router = useRouter();
   const { user } = useAuth();
 
   const [audioSource, setAudioSource] = useState(null);
@@ -89,6 +90,7 @@ const SwipePage = () => {
           },
         ],
       });
+      // sent to chat page
     }
   };
 
@@ -109,11 +111,7 @@ const SwipePage = () => {
 
         // ✅ 3. Combine all exclusion IDs
         const excludedIds = [
-          ...new Set([
-            ...passedUserIds,
-            ...swipedUserIds,
-            user.uid,
-          ]),
+          ...new Set([...passedUserIds, ...swipedUserIds, user.uid]),
         ];
 
         // ✅ 4. Fetch all users ONCE using getDocs
@@ -131,7 +129,6 @@ const SwipePage = () => {
 
         // ✅ 6. Set state ONCE
         setUsers(filteredUsers);
-
       } catch (error) {
         console.error("Error fetching users:", error);
         Toast.show({
@@ -146,8 +143,7 @@ const SwipePage = () => {
     };
 
     fetchUsers();
-
-  }, []); 
+  }, []);
 
   const replayAudio = () => {
     if (!player || !status.isLoaded) return; // check player exists and is loaded
@@ -167,7 +163,8 @@ const SwipePage = () => {
 
   useEffect(() => {
     // This effect also needs to be careful
-    if (users && users.length > 0) { // Check for both users and users.length
+    if (users && users.length > 0) {
+      // Check for both users and users.length
       const firstAudio =
         users[0].audioUrls[
           Math.floor(Math.random() * users[0].audioUrls.length)
