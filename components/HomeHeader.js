@@ -1,18 +1,30 @@
-import { StyleSheet, Text, View, Platform, TouchableOpacity } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  Platform,
+  TouchableOpacity,
+} from "react-native";
 import React from "react";
 // react-native-safe-area-context is better for headers as it gives more control
 import { SafeAreaView } from "react-native-safe-area-context";
 // Import icons (included with Expo)
 import { Ionicons } from "@expo/vector-icons"; // Removed MaterialCommunityIcons
 import Toast from "react-native-toast-message";
+import { FilePen } from "lucide-react-native";
+import { useRouter } from "expo-router";
 
 const HomeHeader = () => {
+  const router = useRouter();
   const handleNotificationPress = () => {
     Toast.show({
-      type: 'success', // Can be 'success', 'error', 'info'
-      text1: 'Notification Clicked',
-      text2: 'Your changes have been updated successfully.'
+      type: "success", // Can be 'success', 'error', 'info'
+      text1: "Notification Clicked",
+      text2: "Your changes have been updated successfully.",
     });
+  };
+  const handleApplyPress = () => {
+    router.push("/Apply");
   }
   return (
     // Use edges to only apply padding to the top (inside the safe area)
@@ -22,8 +34,12 @@ const HomeHeader = () => {
         <Text style={styles.title}>BongDate</Text>
 
         {/* Right Side: Icon */}
-        <TouchableOpacity style={styles.iconsContainer} onPress={handleNotificationPress}>
+        {/* <TouchableOpacity style={styles.iconsContainer} onPress={handleNotificationPress}>
           <Ionicons name="notifications-outline" size={26} color="white" />
+        </TouchableOpacity> */}
+
+        <TouchableOpacity style={styles.iconsContainer} onPress={handleApplyPress} >
+          <FilePen color="black" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -34,7 +50,7 @@ export default HomeHeader;
 
 const styles = StyleSheet.create({
   safeArea: {
-    backgroundColor: "#E91E63", // Your pink theme color
+    backgroundColor: "#ffffffff", // Your pink theme color
     // --- Correct Shadow for iOS ---
     shadowColor: "#000",
     shadowOffset: {
@@ -44,8 +60,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3.84,
     // --- Correct Shadow for Android ---
-    elevation: 5,
-    borderBottomEndRadius: 10, 
+    // elevation: 5,
+    borderBottomEndRadius: 10,
     borderBottomStartRadius: 10,
   },
   headerContainer: {
@@ -56,7 +72,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, // Padding on the sides
   },
   title: {
-    color: "#FFFFFF", // White text for contrast
+    color: "#E91E63", // White text for contrast
     fontSize: 22,
     fontWeight: "bold",
   },
@@ -66,4 +82,3 @@ const styles = StyleSheet.create({
   },
   // The 'icon' style with marginLeft was removed as it's no longer needed
 });
-

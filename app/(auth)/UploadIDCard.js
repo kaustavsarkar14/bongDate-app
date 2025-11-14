@@ -15,8 +15,16 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { Circle } from "lucide-react-native";
 import { useRegistration } from "../../context/RegistrationDataContext";
 import { uploadImageToFirebase } from "../../utilities/firebaseFunctions";
+import { GoogleGenAI } from "@google/genai";
+
+// ⚠️ IMPORTANT: Never hardcode API keys in your app.
+// Use environment variables (e.g., via eas.json or .env)
+const GEMINI_API_KEY = "AIzaSyAye-_5mBVbKILBxgGPZUX1B4SwnKyXAhg";
 
 const UploadIDCard = () => {
+  const ai = new GoogleGenAI({
+    apiKey: GEMINI_API_KEY,
+  });
   const router = useRouter();
   const { formData, updateFormData } = useRegistration();
   const [permission, requestPermission] = useCameraPermissions();
@@ -32,7 +40,8 @@ const UploadIDCard = () => {
 
   if (!permission) {
     return (
-      <View>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
         <Text>Loading camera permissions...</Text>
       </View>
     );
@@ -41,7 +50,7 @@ const UploadIDCard = () => {
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
+        <View style={styles.centered}>
           <Text style={styles.title}>Permission Required</Text>
           <Text style={styles.subtitle}>
             We need your permission to use the camera to capture your ID card.
@@ -64,7 +73,7 @@ const UploadIDCard = () => {
       });
       setPreviewUri(photo.uri);
     } catch (error) {
-      console.error(error);
+      console.error("Capture error:", error);
       Alert.alert("Error", "Failed to capture ID photo.");
     } finally {
       setIsLoading(false);
@@ -77,26 +86,99 @@ const UploadIDCard = () => {
 
   const handleConfirm = async () => {
     if (!previewUri) return;
-    setIsLoading(true);
+    setIsLoading(true); // Start loading for the entire upload + validation process
     try {
+      // 1. Upload the image
       const uploadedImageLink = await uploadImageToFirebase(previewUri);
-      updateFormData({
-        idCardUploaded: true,
-        idCardPhotoURL: uploadedImageLink,
-      });
       console.log("✅ Uploaded ID card:", uploadedImageLink);
-      router.push("UploadAudio");
+
+      // 2. Validate the image
+      const isIDCard = await validateImage(uploadedImageLink);
+
+      if (isIDCard) {
+        // 3a. If valid, update data and move to next screen
+        updateFormData({
+          idCardUploaded: true,
+          idCardPhotoURL: uploadedImageLink,
+        });
+        router.push("UploadAudio"); // Go to the next step
+      } else {
+        // 3b. If invalid, alert user and force retake
+        Alert.alert(
+          "Invalid Photo",
+          "This does not appear to be an ID card. Please retake the photo."
+        );
+        handleRetake(); // Go back to camera
+      }
     } catch (error) {
-      console.error(error);
+      console.error("Confirmation error:", error);
       Alert.alert("Upload Failed", error.message || "Please try again.");
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Stop loading regardless of outcome
     }
   };
 
   const handleSkip = () => {
     updateFormData({ idCardUploaded: false });
-    router.push("SuccessScreen");
+    router.push("SuccessScreen"); // Ensure this is the correct next screen for skipping
+  };
+
+  /**
+   * Validates if the uploaded image is an ID card using Gemini.
+   * @param {string} imageUrl - The public URL of the uploaded image.
+   * @returns {Promise<boolean>} - True if it's an ID card, false otherwise.
+   */
+  const validateImage = async (imageUrl) => {
+    try {
+      // 1️⃣ Fetch the image
+      const response = await fetch(imageUrl);
+      const arrayBuffer = await response.arrayBuffer();
+
+      // 2️⃣ Convert to Base64
+      const base64ImageData = arrayBufferToBase64(arrayBuffer);
+
+      // 3️⃣ Send to Gemini with a specific prompt
+      const result = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite", // Using a fast model
+        contents: [
+          {
+            inlineData: {
+              // The uploader should output jpeg, but png is also common
+              mimeType: "image/jpeg",
+              data: base64ImageData,
+            },
+          },
+          {
+            text: "Is this image a photo of an official identification card, such as a driver's license, passport, Aadhar card, PAN card, or voter ID card? Answer with only the single word 'YES' or 'NO'.",
+          },
+        ],
+      });
+
+      const text = result.text.trim().toUpperCase();
+      console.log("Gemini validation result:", text);
+
+      // 4️⃣ Return true only if the answer is exactly "YES"
+      return text === "YES";
+    } catch (error) {
+      console.error("Gemini validation error:", error);
+      // Fail-safe: If AI check fails, reject the image.
+      Alert.alert(
+        "Verification Failed",
+        "Could not verify the image. Please try again."
+      );
+      return false;
+    }
+  };
+
+  // 🔄 Convert ArrayBuffer → Base64 for RN
+  const arrayBufferToBase64 = (buffer) => {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return global.btoa(binary); // RN supports btoa()
   };
 
   return (
@@ -108,13 +190,14 @@ const UploadIDCard = () => {
             <TouchableOpacity
               style={[styles.button, { backgroundColor: "#E91E63" }]}
               onPress={handleRetake}
+              disabled={isLoading} // Disable retake while confirming
             >
               <Text style={styles.buttonText}>Retake</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, { backgroundColor: "#4CAF50" }]}
               onPress={handleConfirm}
-              disabled={isLoading}
+              disabled={isLoading} // Disable button while loading
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
@@ -138,7 +221,7 @@ const UploadIDCard = () => {
             <View style={styles.square} />
 
             <View style={styles.controls}>
-              {isLoading ? (
+              {isLoading ? ( // Show loading indicator if capture is in progress
                 <ActivityIndicator size="large" color="#ffffff" />
               ) : (
                 <TouchableOpacity
@@ -169,6 +252,26 @@ const UploadIDCard = () => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#000" },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#000",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#fff",
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#ccc",
+    textAlign: "center",
+    marginTop: 10,
+    marginBottom: 20,
+  },
   camera: { flex: 1 },
   overlay: {
     flex: 1,
@@ -180,10 +283,10 @@ const styles = StyleSheet.create({
   headerText: { fontSize: 24, fontWeight: "bold", color: "#fff" },
   subHeaderText: { fontSize: 16, color: "#fff", marginTop: 10 },
   square: {
-    width: "70%",
-    aspectRatio: 1, // square
-    borderRadius: 20,
-    borderWidth: 4,
+    width: "85%", // Made slightly larger for better alignment
+    aspectRatio: 1.58, // Aspect ratio for a standard ID card (e.g., CR80)
+    borderRadius: 15,
+    borderWidth: 3,
     borderColor: "#fff",
     borderStyle: "dashed",
     opacity: 0.8,
@@ -204,14 +307,14 @@ const styles = StyleSheet.create({
   },
   skipButton: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 10 : 20,
+    top: Platform.OS === "ios" ? 60 : 20, // Adjusted for safe area
     right: 20,
     padding: 10,
   },
   skipButtonText: { fontSize: 18, color: "#fff", fontWeight: "500" },
   backButton: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 10 : 20,
+    top: Platform.OS === "ios" ? 60 : 20, // Adjusted for safe area
     left: 20,
     width: 40,
     height: 40,
@@ -228,14 +331,15 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: "90%",
-    height: "70%",
+    height: undefined,
+    aspectRatio: 1.58, // Match the card aspect ratio
     borderRadius: 10,
   },
   previewButtons: {
     flexDirection: "row",
     marginTop: 30,
     width: "80%",
-    justifyContent: "space-between",
+    justifyContent: "space-around", // Use space-around for better spacing
   },
   button: {
     flex: 0.45,
