@@ -101,7 +101,7 @@ const UploadIDCard = () => {
           idCardUploaded: true,
           idCardPhotoURL: uploadedImageLink,
         });
-        router.push("UploadAudio"); // Go to the next step
+        router.push("UploadVideos"); // Go to the next step
       } else {
         // 3b. If invalid, alert user and force retake
         Alert.alert(
@@ -120,7 +120,7 @@ const UploadIDCard = () => {
 
   const handleSkip = () => {
     updateFormData({ idCardUploaded: false });
-    router.push("SuccessScreen"); // Ensure this is the correct next screen for skipping
+    router.push("UploadVideos"); // Ensure this is the correct next screen for skipping
   };
 
   /**

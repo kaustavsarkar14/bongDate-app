@@ -1,295 +1,336 @@
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot, 
-  query,
-  setDoc,
-  where, // 👈 Added for the query
-} from "firebase/firestore";
-import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  StyleSheet,
+  View,
   Text,
   TouchableOpacity,
-  View,
+  StyleSheet,
+  Alert,
+  Platform,
+  KeyboardAvoidingView,
+  ScrollView,
+  Switch, // 1. Import Switch for the toggle
 } from "react-native";
-import Swiper from "react-native-deck-swiper";
-import { useAuth } from "../../context/AuthContext";
-import { db } from "../../firebase.config";
-import Toast from "react-native-toast-message";
-import { getChatIdFromUserIds } from "../../utilities/functions";
-import SwipeCard from "../../components/SwipeCard";
-import {
-  useAudioPlayer,
-  useAudioPlayerStatus,
-  useAudioSampleListener,
-} from "expo-audio";
-import SwipeCardDetail from "../../components/SwipeCardDetail";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRegistration } from "../../context/RegistrationDataContext";
+import { ChevronRight, Eye } from "lucide-react-native"; 
 
-const SwipePage = () => {
-  const [users, setUsers] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [showProfileModal, setShowProfileModal] = useState(false);
+// Next button icon
+const ArrowIcon = () => (
+  <View style={styles.arrowIcon}>
+    <ChevronRight color="#fff" size={28} strokeWidth={3} />
+  </View>
+);
 
-  const { user } = useAuth(); // Contains current logged-in user details
+const RegistrationPage3 = () => {
+  const { formData, updateFormData } = useRegistration();
+  
+  // oppositeGenderPreference are stored as an array, e.g., ['man', 'woman']
+  const [oppositeGenderPreference, setoppositeGenderPreference] = useState(formData.oppositeGenderPreference || []);
+  
+  // State for the "open to everyone" toggle
+  const [openToEveryone, setOpenToEveryone] = useState(
+    oppositeGenderPreference.length === 3 // Auto-check if all are selected
+  );
+  
+  const router = useRouter();
+  const allOptions = ["man", "woman", "nonbinary"];
 
-  const [audioSource, setAudioSource] = useState(null);
+  // Effect to manage the "open to everyone" toggle
+  useEffect(() => {
+    if (openToEveryone) {
+      setoppositeGenderPreference(allOptions);
+    } else {
+      // If user toggles off, clear oppositeGenderPreference unless they were already partial
+      if (oppositeGenderPreference.length === allOptions.length) {
+        setoppositeGenderPreference([]);
+      }
+    }
+  }, [openToEveryone]);
 
-  const player = useAudioPlayer(audioSource);
-  const status = useAudioPlayerStatus(player);
+  // Handle selecting an individual preference
+  const handleSelectPreference = (option) => {
+    if (openToEveryone) return; // Do nothing if toggle is on
 
-  const handleSwipe = (cardIndex) => {
-    console.log("first");
-    if (cardIndex === users.length - 1) { // Fixed comparison operator
+    let newoppositeGenderPreference;
+    if (oppositeGenderPreference.includes(option)) {
+      // De-select
+      newoppositeGenderPreference = oppositeGenderPreference.filter((item) => item !== option);
+    } else {
+      // Select
+      newoppositeGenderPreference = [...oppositeGenderPreference, option];
+    }
+    setoppositeGenderPreference(newoppositeGenderPreference);
+
+    // Check if all are selected, and update the "everyone" toggle
+    if (newoppositeGenderPreference.length === allOptions.length) {
+      setOpenToEveryone(true);
+    }
+  };
+
+  const handleNext = () => {
+    if (oppositeGenderPreference.length === 0) {
+      Alert.alert("Please select an option", "Who would you like to meet?");
       return;
     }
-    if (!users[cardIndex]) return;
-    setAudioSource(
-      users[cardIndex + 1].audioUrls?.[Math.floor(Math.random() * 3)]
-    );
-  };
-  const handleSwipeLeft = (cardIndex) => {
-    if (!users[cardIndex]) return;
-    const swipedUser = users[cardIndex];
-    
-    // Remove swiped user from state first for snappy UI
-    setUsers((prevUsers) =>
-      prevUsers.filter((_, index) => index !== cardIndex)
-    );
 
-    // Persist the pass action to Firestore
-    setDoc(doc(db, "users", user.uid, "passes", swipedUser.id), swipedUser);
+    // Save the oppositeGenderPreference array to the central context
+    updateFormData({ oppositeGenderPreference });
+
+    console.log("Step 3 Data Updated:", { ...formData, oppositeGenderPreference });
+
+    // Navigate to the next step
+    router.push("RegistrationPage4"); // You'll create this page next
   };
 
-  const handleSwipeRight = async (cardIndex) => {
-    if (!users[cardIndex]) return;
-    const swipedUser = users[cardIndex];
-
-    // Remove swiped user from state first for snappy UI
-    setUsers((prevUsers) =>
-      prevUsers.filter((_, index) => index !== cardIndex)
-    );
-
-    // Persist the like action to Firestore
-    setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
-
-    // Check for a match
-    const checkIfOtherUserSwiped = await getDoc(
-      doc(db, "users", swipedUser.uid, "likes", user.uid)
-    );
-    
-    if (checkIfOtherUserSwiped.exists()) {
-      // It's a match!
-      Toast.show({
-        type: "success",
-        text1: "You matched with " + swipedUser.name,
-      });
-
-      // Create a chat document
-      setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
-        isLocked: true,
-        users: [
-          {
-            uid: user.uid,
-            profileUnlockRequest: false,
-          },
-          {
-            uid: swipedUser.uid,
-            profileUnlockRequest: false,
-          },
-        ],
-      });
-    }
-  };
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setLoading(true);
-
-        // --- 1. Get Exclusion IDs (Passed, Liked, and Self) ---
-        const [passesSnapshot, likesSnapshot] = await Promise.all([
-          getDocs(collection(db, "users", user.uid, "passes")),
-          getDocs(collection(db, "users", user.uid, "likes")),
-        ]);
-        
-        const passedUserIds = passesSnapshot.docs.map((doc) => doc.id);
-        const swipedUserIds = likesSnapshot.docs.map((doc) => doc.id);
-
-        const excludedIds = [
-          ...new Set([
-            ...passedUserIds,
-            ...swipedUserIds,
-            user.uid, // Always exclude self
-          ]),
-        ];
-
-        // --- 2. Implement Gender Preference Filter using Firestore 'where' ---
-        
-        // Ensure oppositeGenderPreference is an array, default to empty for safety
-        const genderPreferences = user.oppositeGenderPreference || [];
-
-        if (genderPreferences.length === 0) {
-          // If no preferences, show no profiles (or adjust logic as needed)
-          setUsers([]);
-          setLoading(false);
-          return;
-        }
-
-        // Construct the Firestore query: Filter by gender
-        const usersQuery = query(
-          collection(db, "users"),
-          where("gender", "in", genderPreferences) // 🎯 EFFICIENT FILTER
-        );
-
-        const usersSnapshot = await getDocs(usersQuery);
-
-        const usersMatchingGender = usersSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          uid: doc.id, // Ensure uid is present for the exclusion filter
-          ...doc.data(),
-        }));
-
-        // --- 3. Client-Side Filter for Exclusions ---
-        const filteredUsers = usersMatchingGender.filter(
-          (u) => !excludedIds.includes(u.uid) && u.uid !== user.uid // Redundant u.uid !== user.uid if excludedIds includes it, but safe
-        );
-
-        setUsers(filteredUsers);
-
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        Toast.show({
-          type: "error",
-          text1: "Error fetching users",
-          text2: error.message,
-        });
-        setUsers(null); // Clear users on error
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // The fetchUsers function relies on user object which is available via useAuth()
-    // It is safe to call it once the component mounts and 'user' is ready.
-    if (user?.uid) {
-        fetchUsers();
-    }
-
-  }, [user?.uid, user?.oppositeGenderPreference]); // Re-run if preferences change
-
-  const replayAudio = () => {
-    if (!player || !status.isLoaded) return;
-    player.seekTo(0);
-    player.play();
-  };
-  const pauseAudio = () => {
-    if (!player || !status.isLoaded) return;
-    player.pause();
-  };
-  
-  // Auto-play audio when audioSource changes
-  useEffect(() => {
-    if (audioSource) {
-      player.play();
-    }
-    return () => {
-        // Optional cleanup on unmount or before next effect runs
-    };
-  }, [audioSource]);
-
-  // Set initial audio source for the first card
-  useEffect(() => {
-    if (users && users.length > 0 && !audioSource) {
-      const firstAudio =
-        users[0].audioUrls[
-          Math.floor(Math.random() * users[0].audioUrls.length)
-        ];
-      setAudioSource(firstAudio);
-    }
-  }, [users, audioSource]); // Check audioSource to avoid resetting it unnecessarily
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#0000ff" />
+  // Helper to create a checkbox button (based on your image)
+  const Checkbox = ({ label, selected, onSelect, disabled }) => (
+    <TouchableOpacity
+      style={[styles.checkboxButton, selected && styles.checkboxSelected]}
+      onPress={onSelect}
+      disabled={disabled}
+    >
+      <Text
+        style={[
+          styles.checkboxButtonText,
+          selected && styles.checkboxTextSelected,
+          disabled && styles.checkboxTextDisabled,
+        ]}
+      >
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.checkboxSquare,
+          selected && styles.checkboxSquareSelected,
+          disabled && styles.checkboxSquareDisabled,
+        ]}
+      >
+        {selected && <View style={styles.checkboxDot} />}
       </View>
-    );
-  }
-  
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={styles.container}>
-      {!users || users.length === 0 ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={{ fontSize: 20 }}>No more profiles 😢</Text>
+          <Text style={styles.title}>Who would you like to meet?</Text>
+          <Text style={styles.subtitle}>
+            You can choose more than one answer and change it any time.
+          </Text>
+
+          {/* "Open to everyone" Toggle Row */}
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleText}>I'm open to dating everyone</Text>
+            <Switch
+              trackColor={{ false: "#767577", true: "#E91E63" }}
+              thumbColor={openToEveryone ? "#f4f3f4" : "#f4f3f4"}
+              ios_backgroundColor="#3e3e3e"
+              onValueChange={setOpenToEveryone}
+              value={openToEveryone}
+            />
+          </View>
+
+          {/* Preference Checkboxes */}
+          <View style={styles.checkboxGroup}>
+            <Checkbox
+              label="man"
+              selected={oppositeGenderPreference.includes("man")}
+              onSelect={() => handleSelectPreference("man")}
+              disabled={openToEveryone}
+            />
+            <Checkbox
+              label="woman"
+              selected={oppositeGenderPreference.includes("woman")}
+              onSelect={() => handleSelectPreference("woman")}
+              disabled={openToEveryone}
+            />
+            <Checkbox
+              label="nonbinary people"
+              selected={oppositeGenderPreference.includes("nonbinary")}
+              onSelect={() => handleSelectPreference("nonbinary")}
+              disabled={openToEveryone}
+            />
+          </View>
+        </ScrollView>
+        
+        {/* Footer Note */}
+        <View style={styles.footerNote}>
+          <Eye color="#666" size={20} />
+          <Text style={styles.footerText}>
+            You'll only be shown to people looking to date your gender (
+            {formData.gender || "..."}).
+          </Text>
         </View>
-      ) : (
-        <Swiper
-          // key helps re-render Swiper when user list or play status changes
-          key={`${users?.length}-${status.playing}`} 
-          keyExtractor={(card) => card.uid}
-          cards={users}
-          backgroundColor={"transparent"}
-          verticalSwipe={false}
-          disableBottomSwipe={true}
-          onSwipedAll={() => {
-            setUsers(null);
-          }}
-          renderCard={(card) => {
-            return (
-              <SwipeCard
-                user={card}
-                replayAudio={replayAudio}
-                player={player}
-                status={status}
-                key={card.uid}
-                pauseAudio={pauseAudio}
-              />
-            );
-          }}
-          onSwipedLeft={(cardIndex) => handleSwipeLeft(cardIndex)}
-          onSwipedRight={(cardIndex) => handleSwipeRight(cardIndex)}
-          onSwipedTop={() => {
-            console.log("swipped top");
-          }}
-          onSwiped={handleSwipe}
-          cardIndex={0}
-          stackSize={10}
-        />
-      )}
-      
-      <SwipeCardDetail
-        visible={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-      />
-    </View>
+
+        {/* Floating "Next" Button */}
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <ArrowIcon />
+        </TouchableOpacity>
+
+        {/* Back Button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
-export default SwipePage;
-
-// --- Stylesheet remains the same ---
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    // backgroundColor: "#F5FCFF",
+    backgroundColor: "#ffffff",
   },
-  card: {
-    height: 400,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "blue",
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  container: {
+    flexGrow: 1,
     justifyContent: "center",
-    backgroundColor: "#FF94CF",
+    alignItems: "center",
+    padding: 20,
+    paddingBottom: 120, // Add padding to avoid floating buttons and footer
   },
-  text: {
+  title: {
+    fontSize: 26,
+    fontWeight: "bold",
+    marginBottom: 10,
     textAlign: "center",
-    fontSize: 50,
-    backgroundColor: "transparent",
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 40,
+    paddingHorizontal: 20,
+  },
+  // Toggle Row
+  toggleRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 30,
+    marginBottom: 20,
+  },
+  toggleText: {
+    fontSize: 18,
+    color: "#333",
+  },
+  // Checkbox Styles
+  checkboxGroup: {
+    width: "100%",
+  },
+  checkboxButton: {
+    width: "100%",
+    height: 55,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    marginBottom: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  checkboxSelected: {
+    borderColor: "#E91E63", // Pink color
+    borderWidth: 2,
+  },
+  checkboxButtonText: {
+    fontSize: 18,
+    color: "#333",
+  },
+  checkboxTextSelected: {
+    fontWeight: "bold",
+    color: "#E91E63",
+  },
+  checkboxTextDisabled: {
+    color: "#aaa",
+  },
+  checkboxSquare: {
+    height: 24,
+    width: 24,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#ddd",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxSquareSelected: {
+    borderColor: "#E91E63",
+  },
+  checkboxSquareDisabled: {
+    borderColor: "#eee",
+  },
+  checkboxDot: {
+    height: 12,
+    width: 12,
+    borderRadius: 4,
+    backgroundColor: "#E91E63",
+  },
+  // Footer Note
+  footerNote: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
+    right: 100, // Make space for the next button
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  footerText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#666',
+    flexShrink: 1, // Allow text to wrap
+  },
+  // Floating Buttons
+  nextButton: {
+    position: "absolute",
+    bottom: 40,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#E91E63",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 5,
+  },
+  arrowIcon: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backButton: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 10 : 20,
+    left: 20,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backButtonText: {
+    fontSize: 30,
+    color: "#333",
   },
 });
+
+export default RegistrationPage3;

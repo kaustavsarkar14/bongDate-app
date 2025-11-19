@@ -76,7 +76,7 @@ const MainLayout = () => {
         return;
       } else if (isAuthenticated) {
         // User is authenticated, go to UploadAudio
-        router.replace("/Apply");
+        router.replace("/SwipePage");
       } else if (isAuthenticated === false) {
         // User is not authenticated, go to login
         router.replace("EnterPhoneNumber");

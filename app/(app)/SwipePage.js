@@ -1,19 +1,9 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  query,
-  setDoc,
-  where,
-} from "firebase/firestore";
-import { useEffect, useState } from "react";
+// app/screens/SwipePage.jsx
+import React, { useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import Swiper from "react-native-deck-swiper";
@@ -22,119 +12,60 @@ import { db } from "../../firebase.config";
 import Toast from "react-native-toast-message";
 import { getChatIdFromUserIds } from "../../utilities/functions";
 import SwipeCard from "../../components/SwipeCard";
-import {
-  useAudioPlayer,
-  useAudioPlayerStatus,
-  useAudioSampleListener,
-} from "expo-audio";
-import SwipeCardDetail from "../../components/SwipeCardDetail";
+import { getDocs, collection, doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "expo-router";
 
 const SwipePage = () => {
+  const { user } = useAuth();
+  const router = useRouter();
+
   const [users, setUsers] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const router = useRouter();
-  const { user } = useAuth();
 
-  const [audioSource, setAudioSource] = useState(null);
+  // uid of the currently-active top card (only this card's video will play)
+  const [activeVideoUid, setActiveVideoUid] = useState(null);
 
-  const player = useAudioPlayer(audioSource);
-  const status = useAudioPlayerStatus(player);
-
-  const handleSwipe = (cardIndex) => {
-    console.log("first");
-    if (cardIndex == users.length - 1) {
-      return;
-    }
-    if (!users[cardIndex]) return;
-    setAudioSource(
-      users[cardIndex + 1].audioUrls?.[Math.floor(Math.random() * 3)]
-    );
-  };
-  const handleSwipeLeft = (cardIndex) => {
-    if (!users[cardIndex]) return;
-    setUsers((prevUsers) =>
-      prevUsers.filter((_, index) => index !== cardIndex)
-    );
-
-    const swipedUser = users[cardIndex];
-    setDoc(doc(db, "users", user.uid, "passes", swipedUser.id), swipedUser);
-  };
-
-  const handleSwipeRight = async (cardIndex) => {
-    setUsers((prevUsers) =>
-      prevUsers.filter((_, index) => index !== cardIndex)
-    );
-    const swipedUser = users[cardIndex];
-    setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser);
-    const checkIfOtherUserSwiped = await getDoc(
-      doc(db, "users", swipedUser.uid, "likes", user.uid)
-    );
-    if (checkIfOtherUserSwiped.exists()) {
-      // create a chat
-      Toast.show({
-        type: "success",
-        text1: "You matched with " + swipedUser.name,
-      });
-      setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
-        isLocked: true,
-        users: [
-          {
-            uid: user.uid,
-            profileUnlockRequest: false,
-          },
-          {
-            uid: swipedUser.uid,
-            profileUnlockRequest: false,
-          },
-        ],
-      });
-      // sent to chat page
-      router.push({
-        pathname: "ChatWindow", // Make sure this path is correct
-        params: {
-          otherUserId: swipedUser.id,
-        },
-      });
-    }
-  };
+  // keep a ref for users so callbacks work with latest array
+  const usersRef = useRef(null);
+  usersRef.current = users;
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        // ✅ 1. Fetch passed user IDs
+        setLoading(true);
+
         const passesSnapshot = await getDocs(
           collection(db, "users", user.uid, "passes")
         );
-        const passedUserIds = passesSnapshot.docs.map((doc) => doc.id);
+        const passedUserIds = passesSnapshot.docs.map((d) => d.id);
 
-        // ✅ 2. Fetch swiped user IDs
         const likesSnapshot = await getDocs(
           collection(db, "users", user.uid, "likes")
         );
-        const swipedUserIds = likesSnapshot.docs.map((doc) => doc.id);
+        const swipedUserIds = likesSnapshot.docs.map((d) => d.id);
 
-        // ✅ 3. Combine all exclusion IDs
         const excludedIds = [
           ...new Set([...passedUserIds, ...swipedUserIds, user.uid]),
         ];
 
-        // ✅ 4. Fetch all users ONCE using getDocs
         const usersSnapshot = await getDocs(collection(db, "users"));
-
-        const allUsers = usersSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        const allUsers = usersSnapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
         }));
 
-        // ✅ 5. Filter the list just like before
         const filteredUsers = allUsers.filter(
           (u) => !excludedIds.includes(u.uid) && u.uid !== user.uid
         );
 
-        // ✅ 6. Set state ONCE
         setUsers(filteredUsers);
+
+        // set the first active video to the first user (if exists)
+        if (filteredUsers && filteredUsers.length > 0) {
+          setActiveVideoUid(filteredUsers[0].uid);
+        } else {
+          setActiveVideoUid(null);
+        }
       } catch (error) {
         console.error("Error fetching users:", error);
         Toast.show({
@@ -143,7 +74,6 @@ const SwipePage = () => {
           text2: error.message,
         });
       } finally {
-        // ✅ 7. Set loading to false after everything is done
         setLoading(false);
       }
     };
@@ -151,94 +81,129 @@ const SwipePage = () => {
     fetchUsers();
   }, []);
 
-  const replayAudio = () => {
-    if (!player || !status.isLoaded) return; // check player exists and is loaded
-    player.seekTo(0);
-    player.play();
-  };
-  const pauseAudio = () => {
-    if (!player || !status.isLoaded) return; // check player exists and is loaded
-    player.pause();
-  };
-  useEffect(() => {
-    if (audioSource) {
-      player.play();
-    }
-    return () => {};
-  }, [audioSource]);
+  // handle swipe left (pass)
+  const handleSwipeLeft = (cardIndex) => {
+    const currentUsers = usersRef.current;
+    if (!currentUsers || !currentUsers[cardIndex]) return;
 
-  useEffect(() => {
-    // This effect also needs to be careful
-    if (users && users.length > 0) {
-      // Check for both users and users.length
-      const firstAudio =
-        users[0].audioUrls[
-          Math.floor(Math.random() * users[0].audioUrls.length)
-        ];
-      setAudioSource(firstAudio);
+    const swipedUser = currentUsers[cardIndex];
+    // remove locally
+    setUsers((prev) => prev.filter((_, i) => i !== cardIndex));
+
+    // write pass to Firestore (under current user's passes)
+    setDoc(doc(db, "users", user.uid, "passes", swipedUser.id), swipedUser).catch(
+      (e) => {
+        console.error("Error saving pass:", e);
+      }
+    );
+  };
+
+  // handle swipe right (like)
+  const handleSwipeRight = async (cardIndex) => {
+    const currentUsers = usersRef.current;
+    if (!currentUsers || !currentUsers[cardIndex]) return;
+
+    const swipedUser = currentUsers[cardIndex];
+
+    // remove locally
+    setUsers((prev) => prev.filter((_, i) => i !== cardIndex));
+
+    // write like to Firestore
+    // await setDoc(doc(db, "users", user.uid, "likes", swipedUser.id), swipedUser).catch(
+    //   (e) => {
+    //     console.error("Error saving like:", e);
+    //   }
+    // );
+
+    // // check if other user already liked current user -> match
+    // try {
+    //   const checkSnapshot = await getDoc(
+    //     doc(db, "users", swipedUser.uid, "likes", user.uid)
+    //   );
+    //   if (checkSnapshot.exists()) {
+    //     Toast.show({
+    //       type: "success",
+    //       text1: `You matched with ${swipedUser.name}`,
+    //     });
+
+    //     await setDoc(doc(db, "chats", getChatIdFromUserIds(user.uid, swipedUser.uid)), {
+    //       isLocked: true,
+    //       users: [
+    //         { uid: user.uid, profileUnlockRequest: false },
+    //         { uid: swipedUser.uid, profileUnlockRequest: false },
+    //       ],
+    //     });
+
+    //     // navigate to chat window (adjust route/path if needed)
+    //     router.push({
+    //       pathname: "ChatWindow",
+    //       params: { otherUserId: swipedUser.id },
+    //     });
+    //   }
+    // } catch (e) {
+    //   console.error("Error checking match:", e);
+    // }
+  };
+
+  // generic onSwiped handler (called after a card is swiped)
+  // deck-swiper passes the index of the card that was swiped
+  const handleSwiped = (cardIndex) => {
+    // active should be next card in the list (cardIndex points to the card just swiped)
+    const nextIndex = cardIndex + 1;
+    if (!usersRef.current || nextIndex >= usersRef.current.length) {
+      setActiveVideoUid(null);
+      return;
     }
-  }, [users]);
+    const next = usersRef.current[nextIndex];
+    if (next) setActiveVideoUid(next.uid);
+  };
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View style={styles.centerFull}>
         <ActivityIndicator size="large" color="#0000ff" />
       </View>
     );
   }
+
   return (
     <View style={styles.container}>
       {!users || users.length === 0 ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
+        <View style={styles.centerFull}>
           <Text style={{ fontSize: 20 }}>No more profiles 😢</Text>
         </View>
       ) : (
         <Swiper
-          key={`${users?.length}-${status.playing}`}
-          keyExtractor={(card) => card.uid}
+          key={`${users?.length}-${activeVideoUid ?? "no"}`}
           cards={users}
-          backgroundColor={"transparent"}
+          cardIndex={0}
           verticalSwipe={false}
-          disableBottomSwipe={true}
-          onSwipedAll={() => {
-            setUsers(null);
-          }}
+          disableBottomSwipe
+          stackSize={3}
+          backgroundColor="transparent"
+          onSwipedAll={() => setUsers(null)}
+          onSwiped={handleSwiped}
+          onSwipedLeft={handleSwipeLeft}
+          onSwipedRight={handleSwipeRight}
+          keyExtractor={(card) => card.uid}
           renderCard={(card) => {
+            // determine if this card is currently the active one
+            const isActive = card.uid === activeVideoUid;
+            // pass only the first video url (safe fallback)
+            const videoUrl = Array.isArray(card.videoURLs) && card.videoURLs.length > 0
+              ? card.videoURLs[0]
+              : null;
+
             return (
               <SwipeCard
                 user={card}
-                replayAudio={replayAudio}
-                player={player}
-                status={status}
-                key={card.uid}
-                pauseAudio={pauseAudio}
+                videoUrl={videoUrl}
+                isActive={isActive}
               />
             );
           }}
-          onSwipedLeft={(cardIndex) => handleSwipeLeft(cardIndex)}
-          onSwipedRight={(cardIndex) => handleSwipeRight(cardIndex)}
-          onSwipedTop={() => {
-            console.log("swipped top");
-          }}
-          onSwiped={handleSwipe}
-          cardIndex={0}
-          stackSize={10}
-        ></Swiper>
+        />
       )}
-      {/* <TouchableOpacity
-        onPress={() => {
-          setShowProfileModal(true);
-        }}
-      >
-        <Text>Open Modal</Text>
-      </TouchableOpacity> */}
-
-      <SwipeCardDetail
-        visible={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-      />
     </View>
   );
 };
@@ -246,21 +211,6 @@ const SwipePage = () => {
 export default SwipePage;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    // backgroundColor: "#F5FCFF",
-  },
-  card: {
-    height: 400,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "blue",
-    justifyContent: "center",
-    backgroundColor: "#FF94CF",
-  },
-  text: {
-    textAlign: "center",
-    fontSize: 50,
-    backgroundColor: "transparent",
-  },
+  container: { flex: 1 },
+  centerFull: { flex: 1, justifyContent: "center", alignItems: "center" },
 });
